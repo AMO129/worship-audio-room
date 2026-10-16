@@ -1,73 +1,1210 @@
 /**
  * @file app.js
- * @description UI orchestration and application entry point for Worship Audio Room.
+ * @description Frontend controller for Worship Audio Room.
  *
  * Responsibilities:
- *  - Bootstraps the application on DOMContentLoaded.
- *  - Manages DOM rendering and user interaction events.
- *  - Coordinates between AudioManager (DSP) and WebRTCManager (signaling).
- *  - Reflects FSM state changes in the UI (meter, state badge, deck controls).
+ *  - Instantiates AudioManager and wires all DOM interactions to it.
+ *  - Drives the VU meter and FSM badge via a requestAnimationFrame render loop.
+ *  - Manages the dual-source playlist engine (factory presets + custom uploads).
+ *  - Handles drag-and-drop file ingestion with URL lifecycle management.
+ *  - Wires threshold sliders to live AudioManager parameters.
+ *  - Provides placeholder room/session logic ready for Phase 5 WebRTC hookup.
  *
  * @module app
  */
 
-import { AudioManager } from './AudioManager.js';
-import { WebRTCManager } from './webrtc.js';
+import { AudioManager, EngineState } from './AudioManager.js';
+import { WebRTCManager }            from './webrtc.js';
 
-// ─── Module Instances ─────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * VU meter formula: maps dBFS range [-60, 0] → percentage [0, 100].
+ * Uses a slight headroom compression (96% at 0 dBFS) for visual safety.
+ * @param {number} db - RMS level in dBFS (typically -60 to 0).
+ * @returns {number} Width percentage 0–100.
+ */
+const dbToPercent = (db) => Math.min(Math.max((db + 60) * 1.6, 0), 100);
+
+/**
+ * FSM badge configuration — defines the CSS class, label, and gain label
+ * for each EngineState value.
+ */
+const FSM_CONFIG = {
+  [EngineState.SWELL]: {
+    cssClass:  'fsm-badge--swell',
+    label:     'SWELL',
+    gainLabel: '80%',
+  },
+  [EngineState.CONVERSATIONAL]: {
+    cssClass:  'fsm-badge--conversational',
+    label:     'CONVERSATIONAL',
+    gainLabel: '20%',
+  },
+  [EngineState.CLIMAX]: {
+    cssClass:  'fsm-badge--climax',
+    label:     'CLIMAX',
+    gainLabel: '40%',
+  },
+};
+
+/** All possible FSM badge CSS classes (used to strip previous state styling). */
+const ALL_FSM_CLASSES = Object.values(FSM_CONFIG).map(c => c.cssClass);
+
+/**
+ * Factory preset track definitions.
+ * `url` is empty until Phase 5 ships real audio assets — the UI shows the
+ * button and shows a graceful "No audio file" toast on click.
+ */
+const FACTORY_PRESETS = [
+  { id: 'preset-1', name: 'Deep Pad — C Major',        url: '' },
+  { id: 'preset-2', name: 'Warm Strings — G Major',    url: '' },
+  { id: 'preset-3', name: 'Cinematic Drone — D Minor', url: '' },
+  { id: 'preset-4', name: 'Heavenly Choir — E♭ Major', url: '' },
+  { id: 'preset-5', name: 'Altar Piano — A Major',     url: '' },
+];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// APPLICATION STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Singleton AudioManager instance */
 const audioManager = new AudioManager();
+
+/** Singleton WebRTCManager instance */
 const webrtcManager = new WebRTCManager();
 
-// ─── DOM References ────────────────────────────────────────────────────────────
+/** Whether the audio engine + mic are currently active */
+let isEngineActive = false;
 
-// Populated after DOMContentLoaded when Phase 2 renders the full UI.
-let $app         = null;
-let $statebadge   = null;
-let $vuMeter     = null;
-let $deckControls = null;
-
-// ─── Application Bootstrap ─────────────────────────────────────────────────────
+/** RAF handle for the app-level render loop */
+let renderRafId = null;
 
 /**
- * Initialises the DOM, binds event listeners, and boots audio on first interaction.
+ * Custom playlist state.
+ * @type {Array<{id: string, name: string, size: number, url: string, file: File}>}
+ */
+let customPlaylist = [];
+
+/**
+ * Tracks DOM elements for connected remote peers so they can be removed on leave.
+ * Key: peerId, Value: HTMLElement (.peer-card)
+ * @type {Map<string, HTMLElement>}
+ */
+const peerElements = new Map();
+
+/**
+ * ID of the currently active (playing) track, or null if none.
+ * Used to highlight the active track row in both preset and custom lists.
+ * @type {string|null}
+ */
+let activeTrackId = null;
+
+/**
+ * Currently connected room ID (placeholder until Phase 5).
+ * @type {string|null}
+ */
+let currentRoomId = null;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DOM ELEMENT REFERENCES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// -- Header / Room Controls --
+const $roomIdInput      = document.getElementById('room-id-input');
+const $btnJoin          = document.getElementById('btn-join');
+const $btnLeave         = document.getElementById('btn-leave');
+const $connectionStatus = document.getElementById('connection-status');
+const $statusText       = document.getElementById('status-text');
+
+// -- Engine Toggle --
+const $btnEngineToggle  = document.getElementById('btn-engine-toggle');
+const $engineToggleLabel = $btnEngineToggle?.querySelector('.engine-toggle-label');
+
+// -- FSM Badge --
+const $fsmBadge         = document.getElementById('fsm-badge');
+const $fsmBadgeText     = document.getElementById('fsm-badge-text');
+const $fsmBadgeGain     = document.getElementById('fsm-badge-gain');
+
+// -- VU Meter --
+const $vuBar            = document.getElementById('vu-bar');
+const $vuDbReadout      = document.getElementById('vu-db-readout');
+
+// -- Threshold Sliders --
+const $sliderSpeech     = document.getElementById('slider-speech');
+const $speechThreshVal  = document.getElementById('speech-threshold-val');
+const $sliderClimax     = document.getElementById('slider-climax');
+const $climaxThreshVal  = document.getElementById('climax-threshold-val');
+
+// -- Master Gain --
+const $sliderMasterGain = document.getElementById('slider-master-gain');
+const $masterGainVal    = document.getElementById('master-gain-val');
+
+// -- Tabs --
+const $tabPresets       = document.getElementById('tab-presets');
+const $tabCustom        = document.getElementById('tab-custom');
+const $panelPresets     = document.getElementById('panel-presets');
+const $panelCustom      = document.getElementById('panel-custom');
+
+// -- Factory Preset Track List --
+const $presetTrackItems = document.querySelectorAll('#panel-presets .track-item');
+
+// -- Custom Playlist --
+const $dropZone         = document.getElementById('drop-zone');
+const $fileInput        = document.getElementById('file-input');
+const $btnBrowse        = document.getElementById('btn-browse');
+const $customTrackList  = document.getElementById('custom-track-list');
+const $customListEmpty  = document.getElementById('custom-list-empty');
+const $customTrackCount = document.getElementById('custom-track-count');
+const $btnClearPlaylist = document.getElementById('btn-clear-playlist');
+
+// -- Now Playing --
+const $nowPlayingPill   = document.getElementById('now-playing-pill');
+const $nowPlayingTitle  = document.getElementById('now-playing-title');
+
+// -- Stage / Peer --
+const $localSpeakingRing = document.getElementById('local-speaking-indicator');
+const $peerCountBadge   = document.getElementById('peer-count-badge');
+const $participantCount = document.getElementById('participant-count');
+const $signalQuality    = document.getElementById('signal-quality');
+const $roomModeDisplay  = document.getElementById('room-mode-display');
+
+// -- Footer Metrics --
+const $metricSampleRate = document.getElementById('metric-sample-rate');
+const $metricLatency    = document.getElementById('metric-latency');
+const $metricOutput     = document.getElementById('metric-output');
+const $metricEngine     = document.getElementById('metric-engine');
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOOTSTRAP
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Main application entry point. Called once on DOMContentLoaded.
  */
 function bootstrap() {
-  $app = document.getElementById('app');
+  // Wire AudioManager state callbacks
+  audioManager.onTransition = handleFSMTransition;
 
-  // TODO (Phase 2): Render full UI component tree into #app.
-  // For now, log readiness.
-  console.log('[app] Bootstrap complete. Waiting for Phase 2 UI.');
+  // Wire WebRTCManager callbacks
+  webrtcManager.onPeerJoined   = addPeerCard;
+  webrtcManager.onPeerLeft     = removePeerCard;
+  webrtcManager.onStatusChange = (status, msg) => {
+    // Mirror the WebRTC status into the header connection badge
+    const badgeStatus = (status === 'live') ? 'live' : 'disconnected';
+    setConnectionStatus(badgeStatus, msg);
+    updatePeerCountBadge();
+  };
+  webrtcManager.onLocalPeerId = (id) => {
+    console.log(`[app] Local peer ID: ${id}`);
+  };
+
+  // Bind all interactive elements
+  bindEngineToggle();
+  bindThresholdSliders();
+  bindMasterGainSlider();
+  bindTabNavigation();
+  bindFactoryPresets();
+  bindCustomPlaylist();
+  bindRoomControls();
+
+  // Initialise UI to a known idle state
+  syncFSMBadge(EngineState.SWELL);
+  updateVuMeter(-Infinity);
+  updateFooterMetrics();
+
+  console.log('[app] Bootstrap complete.');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENGINE TOGGLE — Mic init & AudioContext unlock
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wires the "Enable Mic / Audio Engine" toggle button.
+ */
+function bindEngineToggle() {
+  $btnEngineToggle.addEventListener('click', handleEngineToggle);
 }
 
 /**
- * Handles the user's first click/interaction to unlock AudioContext
- * (required by browser autoplay policy).
+ * Handles the engine toggle click.
+ * Activates the AudioContext (requires user gesture) and requests mic access.
  */
-async function onFirstInteraction() {
-  console.log('[app] First interaction — initialising AudioManager...');
-  await audioManager.init();
-  // TODO (Phase 2): Remove the one-time listener and show the main UI.
+async function handleEngineToggle() {
+  if (isEngineActive) {
+    deactivateEngine();
+    return;
+  }
+
+  // Disable button while initialising to prevent double-clicks
+  $btnEngineToggle.disabled = true;
+  setEngineToggleLabel('Starting…');
+
+  try {
+    // Phase 1: Init AudioContext (requires user gesture)
+    await audioManager.init();
+
+    // Phase 2: Request mic access and attach to DSP chain
+    await audioManager.attachMicrophone();
+
+    // Phase 3: Apply current slider values to the live engine
+    applySliderStatesToEngine();
+
+    // Phase 4: Start the app render loop
+    startRenderLoop();
+
+    // Phase 5: If already in a room, hand the live stream to WebRTC
+    if (webrtcManager.isConnected && audioManager.destinationStream) {
+      webrtcManager.addLocalStream(audioManager.destinationStream);
+    }
+
+    // Mark active
+    isEngineActive = true;
+    $btnEngineToggle.setAttribute('aria-pressed', 'true');
+    setEngineToggleLabel('On Air');
+    $btnEngineToggle.disabled = false;
+
+    // Update footer
+    updateFooterMetrics();
+
+    console.log('[app] Engine activated.');
+  } catch (err) {
+    $btnEngineToggle.disabled = false;
+    setEngineToggleLabel('Enable Mic');
+    handleMicError(err);
+  }
 }
 
 /**
- * Updates the UI components to reflect the current FSM state.
- * Called whenever AudioManager emits a state transition event.
- * @param {'SWELL'|'CONVERSATIONAL'|'CLIMAX'} state
+ * Deactivates the audio engine and mic, stopping all processing.
  */
-function onStateChange(state) {
-  // TODO (Phase 2): Update state badge color, animate VU meter response.
-  console.log(`[app] FSM state updated → ${state}`);
+function deactivateEngine() {
+  stopRenderLoop();
+  audioManager.destroy();
+
+  isEngineActive = false;
+  $btnEngineToggle.setAttribute('aria-pressed', 'false');
+  setEngineToggleLabel('Enable Mic');
+
+  // Reset VU meter to idle
+  updateVuMeter(-Infinity);
+  syncFSMBadge(EngineState.SWELL);
+  setLocalSpeakingRing(false);
+  updateFooterMetrics();
+
+  console.log('[app] Engine deactivated.');
 }
 
 /**
- * Updates the VU meter canvas with the current voice RMS level.
- * @param {number} rmsDb - RMS level in dBFS.
+ * Updates the engine toggle button label text.
+ * @param {string} label
  */
-function onVuUpdate(rmsDb) {
-  // TODO (Phase 2): Draw meter bar on canvas.
+function setEngineToggleLabel(label) {
+  if ($engineToggleLabel) $engineToggleLabel.textContent = label;
 }
 
-// ─── Entry Point ───────────────────────────────────────────────────────────────
+/**
+ * Handles mic permission denial or other getUserMedia errors.
+ * Displays an inline status alert in the UI.
+ * @param {Error} err
+ */
+function handleMicError(err) {
+  console.warn('[app] Mic error:', err.name, err.message);
+
+  let userMessage;
+  switch (err.name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+      userMessage = '🎙 Microphone access denied. Please allow mic permission in your browser settings.';
+      break;
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      userMessage = '🎙 No microphone detected. Please connect an audio input device.';
+      break;
+    case 'NotReadableError':
+      userMessage = '🎙 Microphone is in use by another application.';
+      break;
+    default:
+      userMessage = `🎙 Could not start audio engine: ${err.message}`;
+  }
+
+  showAlert(userMessage, 'error');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDER LOOP — VU Meter & FSM Badge (requestAnimationFrame)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Starts the app-level requestAnimationFrame render loop.
+ * Polls AudioManager for the latest dB reading and state every frame.
+ * Intentionally separate from AudioManager's own internal RAFloop so the
+ * UI can degrade gracefully without blocking the DSP thread.
+ */
+function startRenderLoop() {
+  if (renderRafId !== null) return; // guard double-start
+
+  const frame = () => {
+    renderRafId = requestAnimationFrame(frame);
+    renderFrame();
+  };
+  renderRafId = requestAnimationFrame(frame);
+}
+
+/**
+ * Stops the render loop.
+ */
+function stopRenderLoop() {
+  if (renderRafId !== null) {
+    cancelAnimationFrame(renderRafId);
+    renderRafId = null;
+  }
+}
+
+/**
+ * Single render tick — called every animation frame when engine is active.
+ * Reads latest state from AudioManager and updates all visual components.
+ */
+function renderFrame() {
+  const db    = audioManager.getCurrentDecibels();
+  const state = audioManager.currentState;
+
+  updateVuMeter(db);
+  syncFSMBadge(state);
+  setLocalSpeakingRing(db > audioManager.SPEECH_THRESHOLD);
+}
+
+/**
+ * Updates the VU bar width and the dB numeric readout.
+ * Uses the spec formula: (db + 60) * 1.6 → 0–100% range.
+ *
+ * The CSS transition on .vu-bar is `80ms ease` so this is visually smooth
+ * at 60fps without any additional JS interpolation overhead.
+ *
+ * @param {number} db - RMS level in dBFS (-Infinity if silent/inactive).
+ */
+function updateVuMeter(db) {
+  const isFinite = Number.isFinite(db);
+  const pct = isFinite ? dbToPercent(db) : 0;
+
+  // Clamp and apply
+  $vuBar.style.width = `${pct}%`;
+
+  // Colour the bar by zone: green (safe) → yellow (speech) → red (climax)
+  // This is handled by the CSS gradient + box-shadow, so just update readout.
+  $vuDbReadout.textContent = isFinite ? `${db.toFixed(1)} dB` : '— dB';
+
+  // Update ARIA value for accessibility
+  const ariaVal = isFinite ? Math.round(db) : -60;
+  $vuBar.closest('[role="meter"]')?.setAttribute('aria-valuenow', ariaVal);
+}
+
+/**
+ * Updates the FSM state badge to reflect the current engine state.
+ * Strips previous state classes and applies the new one.
+ *
+ * @param {string} state - One of the EngineState enum values.
+ */
+function syncFSMBadge(state) {
+  const config = FSM_CONFIG[state] || FSM_CONFIG[EngineState.SWELL];
+
+  // Swap CSS classes
+  $fsmBadge.classList.remove(...ALL_FSM_CLASSES);
+  $fsmBadge.classList.add(config.cssClass);
+
+  // Update text
+  $fsmBadgeText.textContent = config.label;
+  $fsmBadgeGain.textContent = config.gainLabel;
+
+  // ARIA live region — screen readers announce transitions
+  $fsmBadge.setAttribute('aria-label', `Ducking state: ${config.label} at ${config.gainLabel}`);
+}
+
+/**
+ * Called by AudioManager.onTransition whenever the FSM changes state.
+ * Triggers any one-shot visual effects beyond the render loop.
+ * @param {string} newState
+ * @param {string} prevState
+ */
+function handleFSMTransition(newState, prevState) {
+  console.log(`[app] FSM transition: ${prevState} → ${newState}`);
+  // Sync immediately (render loop will continue updating)
+  syncFSMBadge(newState);
+}
+
+/**
+ * Toggles the speaking ring animation on the local peer card.
+ * @param {boolean} active
+ */
+function setLocalSpeakingRing(active) {
+  $localSpeakingRing?.classList.toggle('speaking-ring--active', active);
+  $localSpeakingRing?.classList.toggle('speaking-ring--inactive', !active);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// THRESHOLD SLIDERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Binds the threshold calibration sliders to live AudioManager parameters.
+ */
+function bindThresholdSliders() {
+  // ── Speech Threshold ─────────────────────────────────────────────────────────
+  $sliderSpeech.addEventListener('input', () => {
+    const val = parseInt($sliderSpeech.value, 10);
+    audioManager.SPEECH_THRESHOLD = val;
+    $speechThreshVal.textContent = `${val} dB`;
+    $sliderSpeech.setAttribute('aria-valuenow', val);
+  });
+
+  // ── Climax Upper Threshold ───────────────────────────────────────────────────
+  $sliderClimax.addEventListener('input', () => {
+    const val = parseInt($sliderClimax.value, 10);
+    audioManager.CLIMAX_UPPER = val;
+    // Enforce hysteresis: CLIMAX_LOWER must stay ≥ 6 dB below CLIMAX_UPPER
+    audioManager.CLIMAX_LOWER = val - 6;
+    $climaxThreshVal.textContent = `${val} dB`;
+    $sliderClimax.setAttribute('aria-valuenow', val);
+  });
+}
+
+/**
+ * Pushes current slider values to the live engine.
+ * Called once after engine initialisation to sync any pre-set slider positions.
+ */
+function applySliderStatesToEngine() {
+  audioManager.SPEECH_THRESHOLD = parseInt($sliderSpeech.value, 10);
+  audioManager.CLIMAX_UPPER     = parseInt($sliderClimax.value, 10);
+  audioManager.CLIMAX_LOWER     = audioManager.CLIMAX_UPPER - 6;
+
+  const masterLinear = parseInt($sliderMasterGain.value, 10) / 100;
+  audioManager.setMasterGain(masterLinear);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MASTER GAIN SLIDER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wires the Master Music Gain slider.
+ * Maps slider range [0, 100] → linear gain [0.0, 1.0] for AudioManager.
+ */
+function bindMasterGainSlider() {
+  $sliderMasterGain.addEventListener('input', () => {
+    const pct = parseInt($sliderMasterGain.value, 10);
+    const linear = pct / 100;
+
+    audioManager.setMasterGain(linear);
+    $masterGainVal.textContent = `${pct}%`;
+    $sliderMasterGain.setAttribute('aria-valuenow', pct);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB NAVIGATION — Factory Presets ↔ My Custom Playlist
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wires the segmented tab buttons to show/hide their corresponding panels.
+ */
+function bindTabNavigation() {
+  $tabPresets.addEventListener('click', () => activateTab('presets'));
+  $tabCustom.addEventListener('click',  () => activateTab('custom'));
+}
+
+/**
+ * Switches the active tab and panel.
+ * @param {'presets'|'custom'} tab
+ */
+function activateTab(tab) {
+  const isPresets = tab === 'presets';
+
+  // Buttons
+  $tabPresets.classList.toggle('tab-btn--active', isPresets);
+  $tabPresets.setAttribute('aria-selected', String(isPresets));
+  $tabCustom.classList.toggle('tab-btn--active', !isPresets);
+  $tabCustom.setAttribute('aria-selected', String(!isPresets));
+
+  // Panels (use hidden attribute for accessibility)
+  $panelPresets.classList.toggle('tab-panel--active', isPresets);
+  $panelPresets.hidden = !isPresets;
+  $panelCustom.classList.toggle('tab-panel--active', !isPresets);
+  $panelCustom.hidden = isPresets;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FACTORY PRESETS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wires preset track "Play / Crossfade" buttons from the static HTML list.
+ * Data is read from data attributes on the .track-item elements.
+ */
+function bindFactoryPresets() {
+  $presetTrackItems.forEach((item, index) => {
+    const preset = FACTORY_PRESETS[index];
+    if (!preset) return;
+
+    // Store id on the DOM element for active-track highlighting
+    item.dataset.trackId = preset.id;
+
+    const $playBtn = item.querySelector('.btn-play-track');
+    if (!$playBtn) return;
+
+    $playBtn.addEventListener('click', () => {
+      playTrack(preset.id, preset.name, preset.url);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CUSTOM PLAYLIST ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Sets up all custom playlist interactions:
+ *   - File input selection
+ *   - Drag-and-drop onto the drop zone
+ *   - "Clear Playlist" button
+ *   - "Browse files" trigger
+ */
+function bindCustomPlaylist() {
+  // ── File input ───────────────────────────────────────────────────────────────
+  $fileInput.addEventListener('change', (e) => {
+    if (e.target.files?.length) {
+      addFilesToPlaylist(Array.from(e.target.files));
+      // Reset the input so the same file can be re-selected if removed
+      e.target.value = '';
+    }
+  });
+
+  // ── Browse button (triggers the hidden file input) ────────────────────────────
+  $btnBrowse?.addEventListener('click', (e) => {
+    e.stopPropagation();       // prevent drop zone click propagation
+    $fileInput.click();
+  });
+
+  // ── Drop Zone — keyboard activation ──────────────────────────────────────────
+  $dropZone.addEventListener('click', () => $fileInput.click());
+  $dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      $fileInput.click();
+    }
+  });
+
+  // ── Drag-and-Drop ─────────────────────────────────────────────────────────────
+  $dropZone.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    $dropZone.classList.add('drag-over');
+  });
+
+  $dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault(); // required to allow drop
+    e.dataTransfer.dropEffect = 'copy';
+    $dropZone.classList.add('drag-over');
+  });
+
+  $dropZone.addEventListener('dragleave', (e) => {
+    // Only remove class when leaving the drop zone itself (not child elements)
+    if (!$dropZone.contains(e.relatedTarget)) {
+      $dropZone.classList.remove('drag-over');
+    }
+  });
+
+  $dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    $dropZone.classList.remove('drag-over');
+
+    const files = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('audio/')
+    );
+
+    if (files.length === 0) {
+      showAlert('Please drop audio files only (MP3, WAV, OGG, FLAC, AAC).', 'warn');
+      return;
+    }
+
+    addFilesToPlaylist(files);
+  });
+
+  // ── Clear Playlist ────────────────────────────────────────────────────────────
+  $btnClearPlaylist.addEventListener('click', clearPlaylist);
+}
+
+/**
+ * Adds an array of File objects to the custom playlist.
+ * Creates Blob URLs for each file and renders track rows.
+ * @param {File[]} files
+ */
+function addFilesToPlaylist(files) {
+  const audioFiles = files.filter((f) => f.type.startsWith('audio/'));
+
+  if (audioFiles.length === 0) {
+    showAlert('No audio files detected. Supported: MP3, WAV, OGG, FLAC, AAC.', 'warn');
+    return;
+  }
+
+  for (const file of audioFiles) {
+    const id  = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const url = URL.createObjectURL(file);
+
+    const track = { id, name: stripExtension(file.name), size: file.size, url, file };
+    customPlaylist.push(track);
+    renderCustomTrackRow(track);
+  }
+
+  syncCustomPlaylistMeta();
+}
+
+/**
+ * Renders a single custom track row into the custom track list.
+ * @param {{id: string, name: string, size: number, url: string}} track
+ */
+function renderCustomTrackRow(track) {
+  // Remove the empty-state placeholder on first track
+  $customListEmpty.style.display = 'none';
+
+  const li = document.createElement('li');
+  li.className = 'track-item';
+  li.role = 'listitem';
+  li.dataset.trackId = track.id;
+
+  li.innerHTML = `
+    <div class="track-info">
+      <div class="track-icon track-icon--custom" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.4"/>
+          <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/>
+        </svg>
+      </div>
+      <div>
+        <span class="track-name" title="${escapeHtml(track.name)}">${escapeHtml(track.name)}</span>
+        <span class="track-meta">${formatFileSize(track.size)}</span>
+      </div>
+    </div>
+    <div class="track-actions">
+      <span class="track-size-badge">${formatFileSize(track.size)}</span>
+      <button
+        class="btn-play-track"
+        data-action="play"
+        aria-label="Play or crossfade ${escapeHtml(track.name)}"
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+          <path d="M2 1.5l9 4.5-9 4.5z"/>
+        </svg>
+        Crossfade
+      </button>
+      <button
+        class="btn-remove-track"
+        data-action="remove"
+        aria-label="Remove ${escapeHtml(track.name)} from playlist"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 4h10M6 4V2h4v2M5 4l.5 10M8 4v10M11 4l-.5 10"
+            stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  `;
+
+  // Bind play button
+  li.querySelector('[data-action="play"]').addEventListener('click', () => {
+    playTrack(track.id, track.name, track.url);
+  });
+
+  // Bind remove button
+  li.querySelector('[data-action="remove"]').addEventListener('click', () => {
+    removeCustomTrack(track.id);
+  });
+
+  $customTrackList.appendChild(li);
+}
+
+/**
+ * Removes a custom track by ID.
+ * Revokes its Blob URL to prevent memory leaks.
+ * @param {string} trackId
+ */
+function removeCustomTrack(trackId) {
+  const index = customPlaylist.findIndex((t) => t.id === trackId);
+  if (index === -1) return;
+
+  const [removed] = customPlaylist.splice(index, 1);
+
+  // Release the Blob URL
+  URL.revokeObjectURL(removed.url);
+
+  // If this was the active track, clear the now-playing display
+  if (activeTrackId === trackId) {
+    activeTrackId = null;
+    setNowPlaying(null);
+  }
+
+  // Remove the DOM row
+  const $row = $customTrackList.querySelector(`[data-track-id="${trackId}"]`);
+  $row?.remove();
+
+  syncCustomPlaylistMeta();
+}
+
+/**
+ * Clears the entire custom playlist, revoking all Blob URLs.
+ */
+function clearPlaylist() {
+  // Revoke all object URLs before clearing
+  for (const track of customPlaylist) {
+    URL.revokeObjectURL(track.url);
+  }
+  customPlaylist = [];
+
+  // If the active track was in the custom list, clear now-playing
+  if (activeTrackId?.startsWith('custom-')) {
+    activeTrackId = null;
+    setNowPlaying(null);
+  }
+
+  // Rebuild the list DOM: remove all LI elements except the empty-state
+  const rows = $customTrackList.querySelectorAll('.track-item:not(#custom-list-empty)');
+  rows.forEach((row) => row.remove());
+
+  syncCustomPlaylistMeta();
+}
+
+/**
+ * Syncs the track count badge and Clear button enabled state.
+ */
+function syncCustomPlaylistMeta() {
+  const count = customPlaylist.length;
+  $customTrackCount.textContent = `${count} track${count !== 1 ? 's' : ''}`;
+  $btnClearPlaylist.disabled = count === 0;
+
+  // Show/hide empty state placeholder
+  $customListEmpty.style.display = count === 0 ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ACTIVE TRACK — Crossfade & Highlight Logic
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Plays or crossfades to a track by its URL.
+ * Updates the active-track highlight and now-playing pill.
+ *
+ * @param {string} trackId   - Unique track identifier.
+ * @param {string} trackName - Display name for the now-playing indicator.
+ * @param {string} url       - Audio URL (file path, Blob URL, or CDN link).
+ */
+function playTrack(trackId, trackName, url) {
+  // Guard: engine must be active to crossfade
+  if (!isEngineActive) {
+    showAlert('Enable the Audio Engine first (click "Enable Mic" button).', 'info');
+    return;
+  }
+
+  // Guard: no URL available for factory presets yet
+  if (!url) {
+    showAlert(`"${trackName}" has no audio file yet. Add it to /client/assets/pads/ in Phase 5.`, 'info');
+    return;
+  }
+
+  // Deactivate previous track row
+  clearActiveTrackHighlight();
+
+  // Crossfade via AudioManager
+  audioManager.crossfadeTo(url);
+
+  // Mark new active track
+  activeTrackId = trackId;
+  highlightActiveTrack(trackId);
+  setNowPlaying(trackName);
+}
+
+/**
+ * Highlights the currently active track row in the DOM.
+ * Searches both preset and custom lists.
+ * @param {string} trackId
+ */
+function highlightActiveTrack(trackId) {
+  const $row = document.querySelector(`[data-track-id="${trackId}"]`);
+  $row?.classList.add('active-track');
+}
+
+/**
+ * Removes the active-track highlight from all track rows.
+ */
+function clearActiveTrackHighlight() {
+  document.querySelectorAll('.track-item.active-track').forEach((el) => {
+    el.classList.remove('active-track');
+  });
+}
+
+/**
+ * Updates the "Now Playing" pill in the Music Deck card header.
+ * @param {string|null} trackName - Track name, or null to show idle state.
+ */
+function setNowPlaying(trackName) {
+  if (trackName) {
+    $nowPlayingTitle.textContent = trackName;
+    $nowPlayingPill.classList.add('is-playing');
+    $nowPlayingPill.setAttribute('aria-label', `Now playing: ${trackName}`);
+  } else {
+    $nowPlayingTitle.textContent = 'No track loaded';
+    $nowPlayingPill.classList.remove('is-playing');
+    $nowPlayingPill.setAttribute('aria-label', 'No track playing');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROOM & SESSION CONTROLS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Wires the Room ID input, Join, and Leave buttons.
+ * Phase 5 will replace placeholder logic with real WebRTC signaling.
+ */
+function bindRoomControls() {
+  $btnJoin.addEventListener('click', handleJoinRoom);
+  $btnLeave.addEventListener('click', handleLeaveRoom);
+
+  // Allow pressing Enter in the Room ID input to join
+  $roomIdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleJoinRoom();
+  });
+}
+
+/**
+ * Handles the "Join Room" action.
+ * Validates the Room ID, opens the WebSocket signaling connection,
+ * then hands the AudioManager's outgoing stream to WebRTC (if live).
+ */
+async function handleJoinRoom() {
+  const roomId = $roomIdInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+
+  if (!roomId) {
+    showAlert('Please enter a Room ID before joining.', 'warn');
+    $roomIdInput.focus();
+    return;
+  }
+
+  if (roomId.length < 3) {
+    showAlert('Room ID must be at least 3 characters.', 'warn');
+    return;
+  }
+
+  // Disable controls during connection attempt
+  $btnJoin.disabled = true;
+  $roomIdInput.disabled = true;
+  setConnectionStatus('disconnected', 'Connecting…');
+
+  try {
+    // Open the WebSocket signaling channel
+    await webrtcManager.connect(roomId);
+
+    currentRoomId = roomId;
+
+    // If the audio engine is already live, share the stream immediately
+    if (isEngineActive && audioManager.destinationStream) {
+      webrtcManager.addLocalStream(audioManager.destinationStream);
+    }
+
+    // Update stage info
+    $roomModeDisplay.textContent = 'Live';
+    $signalQuality.textContent   = 'Excellent';
+    $signalQuality.className     = 'stage-info-value stage-info-value--good';
+    $btnLeave.disabled = false;
+
+    console.log(`[app] Joined room: ${roomId}`);
+  } catch (err) {
+    console.error('[app] Join room failed:', err);
+    showAlert(`Could not connect to room "${roomId}". Is the server running?`, 'error');
+
+    // Re-enable controls so the user can retry
+    $btnJoin.disabled = false;
+    $roomIdInput.disabled = false;
+    setConnectionStatus('disconnected', 'Disconnected');
+  }
+}
+
+/**
+ * Handles the "Leave Room" action.
+ * Closes all peer connections and the signaling WebSocket.
+ */
+function handleLeaveRoom() {
+  webrtcManager.disconnect();
+
+  currentRoomId = null;
+
+  // Remove all dynamically added remote peer cards
+  for (const [peerId] of peerElements) {
+    removePeerCard(peerId);
+  }
+
+  setConnectionStatus('disconnected', 'Disconnected');
+  $roomModeDisplay.textContent = 'Lobby';
+  $signalQuality.textContent   = 'Good';
+  $signalQuality.className     = 'stage-info-value';
+
+  $btnJoin.disabled  = false;
+  $btnLeave.disabled = true;
+  $roomIdInput.disabled = false;
+  updatePeerCountBadge();
+
+  console.log('[app] Left room.');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PEER GRID — Dynamic Attendee Cards
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The peer grid container — reference pulled once for DOM manipulation.
+ * @type {HTMLElement}
+ */
+const $peerGrid = document.getElementById('peer-grid');
+
+/**
+ * Adds a remote peer card to the meeting stage peer grid.
+ * Called by webrtcManager.onPeerJoined when a remote MediaStream arrives.
+ *
+ * @param {string}      peerId - The remote peer's ID (assigned by the server).
+ * @param {MediaStream} stream - The remote peer's audio/video MediaStream.
+ */
+function addPeerCard(peerId, stream) {
+  if (peerElements.has(peerId)) return; // guard duplicate
+
+  // Build the peer card element
+  const li = document.createElement('div');
+  li.className = 'peer-card peer-card--remote';
+  li.setAttribute('role', 'listitem');
+  li.dataset.peerId = peerId;
+
+  const shortId = peerId.slice(0, 8);
+
+  li.innerHTML = `
+    <div class="peer-avatar" aria-hidden="true">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="12" r="6" fill="#38bdf8" opacity="0.6"/>
+        <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12"
+          stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.4"/>
+      </svg>
+    </div>
+    <div class="peer-info">
+      <span class="peer-name">Peer ${shortId}</span>
+      <span class="peer-role" style="color: var(--emerald)">Attendee</span>
+    </div>
+    <div class="peer-indicators" aria-hidden="true">
+      <div class="speaking-ring speaking-ring--inactive" id="ring-${peerId}"></div>
+      <div class="peer-mic-icon">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M3 8c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <line x1="8" y1="13" x2="8" y2="15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+  `;
+
+  // Create an Audio element to play the remote stream
+  const $audio = document.createElement('audio');
+  $audio.srcObject = stream;
+  $audio.autoplay  = true;
+  $audio.muted     = false; // must be false — attendees hear the mix
+  $audio.style.display = 'none';
+  li.appendChild($audio);
+
+  $peerGrid.appendChild(li);
+  peerElements.set(peerId, li);
+  updatePeerCountBadge();
+
+  console.log(`[app] Peer card added: ${peerId}`);
+}
+
+/**
+ * Removes a remote peer card from the meeting stage grid.
+ * Called by webrtcManager.onPeerLeft.
+ *
+ * @param {string} peerId - The peer ID to remove.
+ */
+function removePeerCard(peerId) {
+  const $card = peerElements.get(peerId);
+  if (!$card) return;
+
+  // Stop the audio element to release resources
+  const $audio = $card.querySelector('audio');
+  if ($audio) { $audio.pause(); $audio.srcObject = null; }
+
+  $card.remove();
+  peerElements.delete(peerId);
+  updatePeerCountBadge();
+
+  console.log(`[app] Peer card removed: ${peerId}`);
+}
+
+/**
+ * Syncs the peer count badge and participant count display.
+ */
+function updatePeerCountBadge() {
+  const total = webrtcManager.peerCount + 1; // +1 for self
+  $peerCountBadge.textContent = `${webrtcManager.peerCount} connected`;
+  $participantCount.textContent = String(total);
+}
+
+/**
+ * Updates the connection status badge appearance and text.
+ * @param {'live'|'disconnected'} status
+ * @param {string} label
+ */
+function setConnectionStatus(status, label) {
+  $connectionStatus.className = `status-badge status-${status}`;
+  $statusText.textContent = label;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FOOTER METRICS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Updates the footer metrics bar with current AudioContext diagnostics.
+ * Called on engine start/stop and periodically via the render loop.
+ */
+function updateFooterMetrics() {
+  const ctx = audioManager.context;
+
+  if (ctx) {
+    $metricSampleRate.textContent = `${ctx.sampleRate.toLocaleString()} Hz`;
+    $metricLatency.textContent    = ctx.baseLatency != null
+      ? `${(ctx.baseLatency * 1000).toFixed(1)} ms`
+      : 'N/A';
+    $metricOutput.textContent     = 'MediaStream + Local Monitor';
+    $metricEngine.textContent     = isEngineActive ? 'Running' : 'Idle';
+  } else {
+    $metricSampleRate.textContent = '—';
+    $metricLatency.textContent    = '—';
+    $metricOutput.textContent     = '—';
+    $metricEngine.textContent     = 'Idle';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Strips the file extension from a filename for display purposes.
+ * @param {string} filename - e.g. "worship-pad-c.mp3"
+ * @returns {string} e.g. "worship-pad-c"
+ */
+function stripExtension(filename) {
+  return filename.replace(/\.[^/.]+$/, '');
+}
+
+/**
+ * Formats a file size in bytes to a human-readable string.
+ * @param {number} bytes
+ * @returns {string} e.g. "4.2 MB"
+ */
+function formatFileSize(bytes) {
+  if (bytes < 1024)       return `${bytes} B`;
+  if (bytes < 1024 ** 2)  return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 ** 3)  return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}
+
+/**
+ * Escapes HTML special characters to prevent XSS in dynamic innerHTML.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtml(str) {
+  return str
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#39;');
+}
+
+/**
+ * Displays a transient alert banner in the UI.
+ * Auto-dismisses after 4 seconds.
+ *
+ * @param {string} message  - Message to display.
+ * @param {'info'|'warn'|'error'} [type='info'] - Alert severity.
+ */
+function showAlert(message, type = 'info') {
+  // Remove any existing alert
+  document.getElementById('app-alert')?.remove();
+
+  const $alert = document.createElement('div');
+  $alert.id = 'app-alert';
+  $alert.className = `app-alert app-alert--${type}`;
+  $alert.setAttribute('role', 'alert');
+  $alert.setAttribute('aria-live', 'assertive');
+
+  $alert.innerHTML = `
+    <span class="app-alert-msg">${escapeHtml(message)}</span>
+    <button class="app-alert-close" aria-label="Dismiss alert">×</button>
+  `;
+
+  $alert.querySelector('.app-alert-close').addEventListener('click', () => $alert.remove());
+
+  document.body.appendChild($alert);
+
+  // Auto-dismiss
+  setTimeout(() => $alert.remove(), 4500);
+}
+
+// ── Alert Styles (injected once, avoids needing stylesheet changes in Phase 4) ─
+(function injectAlertStyles() {
+  if (document.getElementById('app-alert-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'app-alert-styles';
+  style.textContent = `
+    .app-alert {
+      position: fixed;
+      bottom: calc(var(--footer-h, 42px) + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-family: var(--font-ui, sans-serif);
+      font-size: 0.8125rem;
+      font-weight: 500;
+      border: 1px solid transparent;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      z-index: 9999;
+      max-width: 480px;
+      animation: alertSlideUp 0.25s ease;
+    }
+    @keyframes alertSlideUp {
+      from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .app-alert--info  { background: #1e293b; color: #38bdf8; border-color: rgba(56,189,248,0.25); }
+    .app-alert--warn  { background: #1e2010; color: #f59e0b; border-color: rgba(245,158,11,0.3); }
+    .app-alert--error { background: #200f0f; color: #ef4444; border-color: rgba(239,68,68,0.3); }
+    .app-alert-close  {
+      background: none; border: none; color: inherit; cursor: pointer;
+      font-size: 1.1rem; line-height: 1; opacity: 0.7; padding: 0 2px;
+      flex-shrink: 0;
+    }
+    .app-alert-close:hover { opacity: 1; }
+    .app-alert-msg { flex: 1; line-height: 1.4; }
+  `;
+  document.head.appendChild(style);
+}());
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', bootstrap);
