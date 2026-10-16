@@ -3,17 +3,622 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Worship Audio Room — A virtual meeting platform with an intelligent praise & worship audio deck." />
+  <meta name="description" content="Worship Audio Room — Real-time virtual meeting platform with an intelligent praise & worship audio deck." />
   <title>Worship Audio Room</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Root application container — populated by app.js -->
-  <div id="app"></div>
 
-  <!-- Module scripts loaded in dependency order -->
-  <script type="module" src="js/AudioManager.js"></script>
-  <script type="module" src="js/webrtc.js"></script>
+  <!-- ═══════════════════════════════════════════════════
+       TOP HEADER
+       ═══════════════════════════════════════════════════ -->
+  <header class="app-header" role="banner">
+    <div class="header-inner">
+
+      <!-- Logo & Wordmark -->
+      <div class="brand" aria-label="Worship Audio Room">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
+            <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">Worship Audio Room</span>
+          <span class="brand-tagline">Intelligent Praise &amp; Worship Console</span>
+        </div>
+      </div>
+
+      <!-- Room Controls -->
+      <div class="room-controls" role="group" aria-label="Room connection controls">
+        <div class="room-input-group">
+          <label for="room-id-input" class="sr-only">Meeting Room ID</label>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="7" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <input
+              id="room-id-input"
+              class="room-id-input"
+              type="text"
+              placeholder="Room ID (e.g. grace-hall)"
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="32"
+            />
+          </div>
+        </div>
+
+        <button id="btn-join" class="btn btn-primary" aria-label="Join meeting room">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Join Room
+        </button>
+        <button id="btn-leave" class="btn btn-danger" disabled aria-label="Leave meeting room">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 8h10M9 5l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+          Leave
+        </button>
+
+        <!-- Connection Status Badge -->
+        <div id="connection-status" class="status-badge status-disconnected" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">Disconnected</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════════
+       MAIN APPLICATION STAGE
+       ═══════════════════════════════════════════════════ -->
+  <main class="app-main" id="app-main">
+    <div class="stage-grid">
+
+      <!-- ─── LEFT COLUMN: Meeting Stage ─────────────────────────── -->
+      <section class="meeting-stage" aria-label="Meeting stage">
+
+        <div class="section-header">
+          <h2 class="section-title">
+            <span class="section-title-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="3" width="10" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M11 6l3-2v8l-3-2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            Meeting Stage
+          </h2>
+          <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
+        </div>
+
+        <!-- Peer Video / Audio Grid -->
+        <div id="peer-grid" class="peer-grid" role="list" aria-label="Connected attendees">
+
+          <!-- Local Peer Card (Self) -->
+          <div class="peer-card peer-card--self" role="listitem" data-peer-id="local">
+            <div class="peer-avatar" aria-hidden="true">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="12" r="6" fill="#38bdf8" opacity="0.8"/>
+                <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.5"/>
+              </svg>
+            </div>
+            <div class="peer-info">
+              <span class="peer-name">You (Host)</span>
+              <span class="peer-role">Preacher</span>
+            </div>
+            <div class="peer-indicators" aria-hidden="true">
+              <div id="local-speaking-indicator" class="speaking-ring speaking-ring--inactive"></div>
+              <div class="peer-mic-icon">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" stroke-width="1.4"/>
+                  <path d="M3 8c0 2.76 2.24 5 5 5s5-2.24 5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                  <line x1="8" y1="13" x2="8" y2="15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty Peer Slot Placeholders -->
+          <div class="peer-card peer-card--empty" role="listitem" aria-label="Empty attendee slot">
+            <div class="peer-avatar peer-avatar--empty" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.2" opacity="0.3"/>
+                <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.3"/>
+              </svg>
+            </div>
+            <span class="peer-waiting-label">Awaiting attendee…</span>
+          </div>
+
+          <div class="peer-card peer-card--empty" role="listitem" aria-label="Empty attendee slot">
+            <div class="peer-avatar peer-avatar--empty" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.2" opacity="0.3"/>
+                <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.3"/>
+              </svg>
+            </div>
+            <span class="peer-waiting-label">Awaiting attendee…</span>
+          </div>
+
+          <div class="peer-card peer-card--empty" role="listitem" aria-label="Empty attendee slot">
+            <div class="peer-avatar peer-avatar--empty" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.2" opacity="0.3"/>
+                <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="1.2" fill="none" opacity="0.3"/>
+              </svg>
+            </div>
+            <span class="peer-waiting-label">Awaiting attendee…</span>
+          </div>
+
+        </div>
+
+        <!-- Stage Info Bar -->
+        <div class="stage-info-bar">
+          <div class="stage-info-item">
+            <span class="stage-info-label">Participants</span>
+            <span id="participant-count" class="stage-info-value">1</span>
+          </div>
+          <div class="stage-info-divider" aria-hidden="true"></div>
+          <div class="stage-info-item">
+            <span class="stage-info-label">Signal</span>
+            <span id="signal-quality" class="stage-info-value stage-info-value--good">Good</span>
+          </div>
+          <div class="stage-info-divider" aria-hidden="true"></div>
+          <div class="stage-info-item">
+            <span class="stage-info-label">Mode</span>
+            <span id="room-mode-display" class="stage-info-value">Lobby</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ─── RIGHT COLUMN: Audio Engineering Deck ───────────────── -->
+      <aside class="audio-deck" aria-label="Praise and Worship Audio Engineering Console">
+
+        <div class="section-header">
+          <h2 class="section-title">
+            <span class="section-title-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/>
+                <circle cx="12" cy="5" r="2" stroke="currentColor" stroke-width="1.4"/>
+                <line x1="6" y1="8" x2="16" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            Audio Console
+          </h2>
+          <span class="deck-label">P&amp;W Engine v1.0</span>
+        </div>
+
+        <!-- ═══ CARD 1: Preacher Voice Channel ═══ -->
+        <div class="deck-card" id="card-voice">
+          <div class="deck-card-header">
+            <div class="deck-card-title-group">
+              <h3 class="deck-card-title">Preacher Voice Channel</h3>
+              <span class="deck-card-subtitle">Intelligient Ducking FSM</span>
+            </div>
+            <!-- Primary Engine Toggle -->
+            <button
+              id="btn-engine-toggle"
+              class="engine-toggle-btn"
+              aria-pressed="false"
+              aria-label="Enable microphone and audio engine"
+            >
+              <span class="engine-toggle-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 1a4 4 0 0 1 4 4v7a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4z" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="M5 10c0 3.86 3.134 7 7 7s7-3.14 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span class="engine-toggle-label">Enable Mic</span>
+            </button>
+          </div>
+
+          <!-- FSM State Badge -->
+          <div class="fsm-state-section" aria-label="Current ducking state">
+            <span class="fsm-label">Ducking State</span>
+            <div id="fsm-badge" class="fsm-badge fsm-badge--swell" role="status" aria-live="polite" aria-atomic="true">
+              <span class="fsm-badge-dot" aria-hidden="true"></span>
+              <span id="fsm-badge-text" class="fsm-badge-text">SWELL</span>
+              <span id="fsm-badge-gain" class="fsm-badge-gain">80%</span>
+            </div>
+          </div>
+
+          <!-- VU Meter -->
+          <div class="vu-meter-section" aria-label="Voice level meter">
+            <div class="vu-meter-header">
+              <span class="vu-label">Voice Level</span>
+              <span id="vu-db-readout" class="vu-db-readout" aria-live="polite" aria-atomic="true">— dB</span>
+            </div>
+            <div class="vu-meter-track" role="meter" aria-valuenow="-60" aria-valuemin="-60" aria-valuemax="0" aria-label="Voice RMS level">
+              <div id="vu-bar" class="vu-bar" style="width: 0%"></div>
+              <!-- Threshold tick markers -->
+              <div class="vu-tick vu-tick--speech" style="left: 33.3%" aria-hidden="true" title="-40 dB Speech"></div>
+              <div class="vu-tick vu-tick--climax-exit" style="left: 63.3%" aria-hidden="true" title="-22 dB Climax Exit"></div>
+              <div class="vu-tick vu-tick--climax-enter" style="left: 73.3%" aria-hidden="true" title="-16 dB Climax Enter"></div>
+            </div>
+            <div class="vu-scale" aria-hidden="true">
+              <span>-60</span><span>-48</span><span>-36</span><span>-24</span><span>-12</span><span>0 dB</span>
+            </div>
+          </div>
+
+          <!-- Threshold Calibration Sliders -->
+          <div class="threshold-sliders" aria-label="Threshold calibration">
+            <div class="slider-row">
+              <div class="slider-label-group">
+                <label for="slider-speech" class="slider-label">Speech Threshold</label>
+                <span id="speech-threshold-val" class="slider-value">-40 dB</span>
+              </div>
+              <input
+                id="slider-speech"
+                class="deck-slider deck-slider--blue"
+                type="range"
+                min="-60"
+                max="-20"
+                value="-40"
+                step="1"
+                aria-valuemin="-60"
+                aria-valuemax="-20"
+                aria-valuenow="-40"
+                aria-label="Speech detection threshold in dBFS"
+              />
+              <div class="slider-range-labels" aria-hidden="true">
+                <span>-60 dB</span><span>-20 dB</span>
+              </div>
+            </div>
+
+            <div class="slider-row">
+              <div class="slider-label-group">
+                <label for="slider-climax" class="slider-label">Climax Upper Threshold</label>
+                <span id="climax-threshold-val" class="slider-value">-16 dB</span>
+              </div>
+              <input
+                id="slider-climax"
+                class="deck-slider deck-slider--amber"
+                type="range"
+                min="-30"
+                max="-10"
+                value="-16"
+                step="1"
+                aria-valuemin="-30"
+                aria-valuemax="-10"
+                aria-valuenow="-16"
+                aria-label="Climax upper threshold in dBFS"
+              />
+              <div class="slider-range-labels" aria-hidden="true">
+                <span>-30 dB</span><span>-10 dB</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /card-voice -->
+
+        <!-- ═══ CARD 2: Praise & Worship Music Deck ═══ -->
+        <div class="deck-card" id="card-music">
+          <div class="deck-card-header">
+            <div class="deck-card-title-group">
+              <h3 class="deck-card-title">P&amp;W Music Deck</h3>
+              <span class="deck-card-subtitle">Crossfade Engine</span>
+            </div>
+            <!-- Now Playing Indicator -->
+            <div id="now-playing-pill" class="now-playing-pill" aria-label="Now playing" aria-live="polite">
+              <div class="eq-bars" aria-hidden="true">
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+                <span class="eq-bar"></span>
+              </div>
+              <span id="now-playing-title" class="now-playing-title">No track loaded</span>
+            </div>
+          </div>
+
+          <!-- Master Gain Slider -->
+          <div class="master-gain-row" aria-label="Master music volume">
+            <label for="slider-master-gain" class="master-gain-label">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M2 8h8M13 4v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <circle cx="10" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="13" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+              Master Gain
+            </label>
+            <div class="master-gain-slider-group">
+              <input
+                id="slider-master-gain"
+                class="deck-slider deck-slider--emerald master-gain-slider"
+                type="range"
+                min="0"
+                max="100"
+                value="80"
+                step="1"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="80"
+                aria-label="Master music gain percentage"
+              />
+              <span id="master-gain-val" class="master-gain-value">80%</span>
+            </div>
+          </div>
+
+          <!-- Segmented Tab Navigation -->
+          <div class="tab-nav" role="tablist" aria-label="Playlist source">
+            <button
+              id="tab-presets"
+              class="tab-btn tab-btn--active"
+              role="tab"
+              aria-selected="true"
+              aria-controls="panel-presets"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M6 7l3 2-3 2V7z" fill="currentColor"/>
+              </svg>
+              Factory Presets
+            </button>
+            <button
+              id="tab-custom"
+              class="tab-btn"
+              role="tab"
+              aria-selected="false"
+              aria-controls="panel-custom"
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              </svg>
+              My Playlist
+            </button>
+          </div>
+
+          <!-- ── Panel: Factory Presets ── -->
+          <div id="panel-presets" class="tab-panel tab-panel--active" role="tabpanel" aria-labelledby="tab-presets">
+            <ul class="track-list" role="list" aria-label="Factory preset pads">
+
+              <li class="track-item" role="listitem" data-track-url="" data-track-name="Deep Pad — C Major">
+                <div class="track-info">
+                  <div class="track-icon track-icon--pad" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
+                      <path d="M6 5.5a3 3 0 0 1 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span class="track-name">Deep Pad — C Major</span>
+                    <span class="track-meta">Atmospheric · 8-bar loop</span>
+                  </div>
+                </div>
+                <div class="track-actions">
+                  <span class="track-tag">Pad</span>
+                  <button class="btn-play-track" aria-label="Play or crossfade Deep Pad C Major">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <path d="M2 1.5l9 4.5-9 4.5z"/>
+                    </svg>
+                    Crossfade
+                  </button>
+                </div>
+              </li>
+
+              <li class="track-item" role="listitem" data-track-url="" data-track-name="Warm Strings — G Major">
+                <div class="track-info">
+                  <div class="track-icon track-icon--strings" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 13L13 3M3 8l5-5M8 13l5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span class="track-name">Warm Strings — G Major</span>
+                    <span class="track-meta">Orchestral · 4-bar loop</span>
+                  </div>
+                </div>
+                <div class="track-actions">
+                  <span class="track-tag">Strings</span>
+                  <button class="btn-play-track" aria-label="Play or crossfade Warm Strings G Major">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <path d="M2 1.5l9 4.5-9 4.5z"/>
+                    </svg>
+                    Crossfade
+                  </button>
+                </div>
+              </li>
+
+              <li class="track-item" role="listitem" data-track-url="" data-track-name="Cinematic Drone — D Minor">
+                <div class="track-info">
+                  <div class="track-icon track-icon--drone" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M2 8h12M4 5l8 6M4 11l8-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span class="track-name">Cinematic Drone — D Minor</span>
+                    <span class="track-meta">Tension · 16-bar loop</span>
+                  </div>
+                </div>
+                <div class="track-actions">
+                  <span class="track-tag">Drone</span>
+                  <button class="btn-play-track" aria-label="Play or crossfade Cinematic Drone D Minor">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <path d="M2 1.5l9 4.5-9 4.5z"/>
+                    </svg>
+                    Crossfade
+                  </button>
+                </div>
+              </li>
+
+              <li class="track-item" role="listitem" data-track-url="" data-track-name="Heavenly Choir — E♭ Major">
+                <div class="track-info">
+                  <div class="track-icon track-icon--choir" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/>
+                      <circle cx="11" cy="6" r="2" stroke="currentColor" stroke-width="1.3"/>
+                      <path d="M2 13c0-2 1.5-3 3-3h6c1.5 0 3 1 3 3" stroke="currentColor" stroke-width="1.3" fill="none"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span class="track-name">Heavenly Choir — E♭ Major</span>
+                    <span class="track-meta">Choral · 8-bar loop</span>
+                  </div>
+                </div>
+                <div class="track-actions">
+                  <span class="track-tag">Choir</span>
+                  <button class="btn-play-track" aria-label="Play or crossfade Heavenly Choir">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <path d="M2 1.5l9 4.5-9 4.5z"/>
+                    </svg>
+                    Crossfade
+                  </button>
+                </div>
+              </li>
+
+              <li class="track-item" role="listitem" data-track-url="" data-track-name="Altar Piano — A Major">
+                <div class="track-info">
+                  <div class="track-icon track-icon--piano" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <rect x="1" y="3" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/>
+                      <path d="M4 3v6M7 3v6M10 3v6M13 3v6" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+                      <rect x="5" y="3" width="2" height="4" rx="0.5" fill="currentColor" opacity="0.6"/>
+                      <rect x="9" y="3" width="2" height="4" rx="0.5" fill="currentColor" opacity="0.6"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span class="track-name">Altar Piano — A Major</span>
+                    <span class="track-meta">Acoustic · 4-bar loop</span>
+                  </div>
+                </div>
+                <div class="track-actions">
+                  <span class="track-tag">Piano</span>
+                  <button class="btn-play-track" aria-label="Play or crossfade Altar Piano">
+                    <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                      <path d="M2 1.5l9 4.5-9 4.5z"/>
+                    </svg>
+                    Crossfade
+                  </button>
+                </div>
+              </li>
+
+            </ul>
+          </div>
+
+          <!-- ── Panel: Custom Playlist ── -->
+          <div id="panel-custom" class="tab-panel" role="tabpanel" aria-labelledby="tab-custom" hidden>
+
+            <!-- Drop Zone -->
+            <div
+              id="drop-zone"
+              class="drop-zone"
+              role="region"
+              aria-label="Drag and drop audio files here, or click to browse"
+              tabindex="0"
+            >
+              <input
+                id="file-input"
+                type="file"
+                accept="audio/*"
+                multiple
+                class="file-input-hidden"
+                aria-label="Select audio files"
+              />
+              <div class="drop-zone-inner" aria-hidden="true">
+                <div class="drop-zone-icon">
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect x="4" y="8" width="24" height="18" rx="3" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2"/>
+                    <path d="M16 20V12M12 16l4-4 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M10 26h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+                  </svg>
+                </div>
+                <p class="drop-zone-primary">Drop audio files here</p>
+                <p class="drop-zone-secondary">or <button type="button" id="btn-browse" class="drop-zone-browse-btn">browse files</button></p>
+                <p class="drop-zone-hint">Supports MP3, WAV, OGG, FLAC, AAC</p>
+              </div>
+            </div>
+
+            <!-- Custom Track List -->
+            <div class="custom-list-header">
+              <span id="custom-track-count" class="custom-track-count">0 tracks</span>
+              <button id="btn-clear-playlist" class="btn-clear" aria-label="Clear all custom tracks" disabled>
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3 4h10M6 4V2h4v2M5 4l.5 10M8 4v10M11 4l-.5 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                Clear Playlist
+              </button>
+            </div>
+
+            <ul
+              id="custom-track-list"
+              class="track-list custom-track-list"
+              role="list"
+              aria-label="Custom uploaded tracks"
+              aria-live="polite"
+            >
+              <!-- Dynamic items injected by app.js -->
+              <li class="track-list-empty" id="custom-list-empty" aria-label="No tracks uploaded yet">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.4"/>
+                  <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.4"/>
+                </svg>
+                <span>No tracks yet. Drop audio above to curate your playlist.</span>
+              </li>
+            </ul>
+
+          </div><!-- /panel-custom -->
+
+        </div><!-- /card-music -->
+
+      </aside><!-- /audio-deck -->
+
+    </div><!-- /stage-grid -->
+  </main>
+
+  <!-- ═══════════════════════════════════════════════════
+       FOOTER — Engine Metrics Status Bar
+       ═══════════════════════════════════════════════════ -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="footer-inner">
+
+      <div class="metric-group">
+        <div class="metric-item">
+          <span class="metric-label">Sample Rate</span>
+          <span id="metric-sample-rate" class="metric-value">—</span>
+        </div>
+        <div class="metric-separator" aria-hidden="true"></div>
+        <div class="metric-item">
+          <span class="metric-label">Latency Hint</span>
+          <span id="metric-latency" class="metric-value">—</span>
+        </div>
+        <div class="metric-separator" aria-hidden="true"></div>
+        <div class="metric-item">
+          <span class="metric-label">Output Destination</span>
+          <span id="metric-output" class="metric-value">—</span>
+        </div>
+        <div class="metric-separator" aria-hidden="true"></div>
+        <div class="metric-item">
+          <span class="metric-label">Engine State</span>
+          <span id="metric-engine" class="metric-value">Idle</span>
+        </div>
+      </div>
+
+      <div class="footer-brand">
+        <span>Worship Audio Room</span>
+        <span class="footer-dot" aria-hidden="true">·</span>
+        <span>Phase 1–3 Build</span>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCRIPTS
+       ═══════════════════════════════════════════════════ -->
   <script type="module" src="js/app.js"></script>
+
 </body>
 </html>
