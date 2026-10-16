@@ -1,0 +1,11 @@
+server/venv/ 
+__pycache__/ 
+*.py[cod] 
+*$py.class 
+*.env 
+.vscode/* 
+!.vscode/settings.json 
+.DS_Store 
+Thumbs.db 
+client/assets/pads/* 
+!client/assets/pads/.gitkeep

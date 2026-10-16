@@ -1,0 +1,80 @@
+/* ============================================================
+   Worship Audio Room — Base Design System
+   Phase 1 Placeholder | Full styles added in Phase 2
+   ============================================================ */
+
+/* --- Google Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* --- Design Tokens --- */
+:root {
+  /* Color Palette */
+  --color-bg-deep:     #0a0b0f;
+  --color-bg-surface:  #12141a;
+  --color-bg-elevated: #1c1f28;
+  --color-border:      #2a2d3a;
+  --color-accent:      #7c6af7;
+  --color-accent-glow: rgba(124, 106, 247, 0.35);
+  --color-gold:        #f0c060;
+  --color-success:     #3dd68c;
+  --color-danger:      #f05252;
+  --color-text-primary:   #eaedf5;
+  --color-text-secondary: #8a8fa8;
+  --color-text-muted:     #4a4f64;
+
+  /* Typography */
+  --font-ui:   'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Transitions */
+  --transition-fast:   150ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow:   600ms ease;
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--color-bg-deep);
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Phase 1 boot splash — replaced during Phase 2 */
+#app::after {
+  content: 'Worship Audio Room — Loading...';
+  font-family: var(--font-mono);
+  color: var(--color-accent);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  opacity: 0.6;
+}
