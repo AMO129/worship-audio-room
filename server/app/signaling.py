@@ -1,84 +1,182 @@
 """
-signaling.py — WebRTC signaling hub via WebSockets.
+signaling.py — Production WebRTC signaling hub with ConnectionManager.
 
 Architecture:
-  - Each room is identified by a `room_id` string.
-  - The server acts as a relay: it forwards SDP offers/answers and
-    ICE candidates between peers in the same room.
-  - No media flows through the server (true peer-to-peer WebRTC).
+  - ConnectionManager owns a dict of rooms: Dict[str, Dict[str, WebSocket]]
+    mapping room_id → { client_id: WebSocket }.
+  - connect()      : accept socket, register peer, broadcast peer-joined.
+  - disconnect()   : remove peer, GC empty rooms, broadcast peer-left.
+  - relay_signal() : forward SDP offer/answer/ICE directly to a named peer.
+  - No media ever transits the server — purely a TURN-free relay.
 
-Message Protocol (JSON):
-  { "type": "offer",     "sdp":  "<SDP string>",          "from": "<peer_id>" }
-  { "type": "answer",    "sdp":  "<SDP string>",          "from": "<peer_id>" }
-  { "type": "candidate", "candidate": { ... RTCIceCandidate ... }, "from": "<peer_id>" }
-  { "type": "join",      "room": "<room_id>",             "peer_id": "<uuid>" }
-
-Phase 1: Connection acceptance and echo. Full relay in Phase 3.
+Message Protocol (server → client):
+  { "type": "peer-joined", "peerId": "<id>", "peers": ["<existing_id>", ...] }
+  { "type": "peer-left",   "peerId": "<id>" }
+  { "type": "signal",      "fromId": "<id>", "signalType": "offer|answer|candidate",
+                           "sdp": "...",  "candidate": {...} }
+  { "type": "pong" }
 """
 
-import json
-import uuid
 import logging
-from typing import Dict, Set
+from typing import Dict
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/ws", tags=["signaling"])
-
-# ─── Room Registry ────────────────────────────────────────────────────────────
-
-# Maps room_id → set of connected WebSocket clients.
-_rooms: Dict[str, Set[WebSocket]] = {}
 
 
-async def _broadcast(room_id: str, message: dict, exclude: WebSocket | None = None):
-    """Broadcast a JSON message to all peers in a room, optionally excluding one."""
-    payload = json.dumps(message)
-    for ws in list(_rooms.get(room_id, [])):
-        if ws is not exclude:
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                logger.warning("Failed to send to a peer in room %s", room_id)
-
-
-# ─── Signaling Endpoint ──────────────────────────────────────────────────────
-
-@router.websocket("/signal/{room_id}")
-async def signaling_endpoint(websocket: WebSocket, room_id: str):
+class ConnectionManager:
     """
-    WebSocket endpoint for WebRTC signaling.
-    Peers connect here to exchange SDP and ICE candidates.
+    Manages multi-room WebSocket connections for WebRTC peer signaling.
+
+    Attributes:
+        rooms: Maps room_id → { client_id: WebSocket } for all active rooms.
     """
-    await websocket.accept()
-    peer_id = str(uuid.uuid4())
-    logger.info("Peer %s joined room %s", peer_id, room_id)
 
-    # Register peer in room
-    _rooms.setdefault(room_id, set()).add(websocket)
+    def __init__(self) -> None:
+        self.rooms: Dict[str, Dict[str, WebSocket]] = {}
 
-    # Notify peer of their assigned ID
-    await websocket.send_json({"type": "connected", "peer_id": peer_id, "room": room_id})
+    # ─── Lifecycle ────────────────────────────────────────────────────────────
 
-    try:
-        while True:
-            raw = await websocket.receive_text()
-            message = json.loads(raw)
-            message["from"] = peer_id  # Tag message with sender
+    async def connect(
+        self,
+        websocket: WebSocket,
+        room_id: str,
+        client_id: str,
+    ) -> None:
+        """
+        Accept the WebSocket, register the peer in its room, then broadcast
+        a `peer-joined` payload so all existing peers can initiate offers.
 
-            msg_type = message.get("type")
-            logger.debug("Room %s | %s from %s", room_id, msg_type, peer_id)
+        The joining peer receives the full list of existing peer IDs so it
+        knows who to expect offers from. Existing peers each receive a
+        `peer-joined` with only the newcomer's ID so they send her an offer.
 
-            # Phase 1: Relay everything to all other peers.
-            # Phase 3: Add type-specific routing and room capacity limits.
-            await _broadcast(room_id, message, exclude=websocket)
+        Args:
+            websocket: The connecting peer's WebSocket.
+            room_id:   Identifier of the room to join.
+            client_id: Unique identifier for this peer (generated client-side).
+        """
+        await websocket.accept()
 
-    except WebSocketDisconnect:
-        logger.info("Peer %s left room %s", peer_id, room_id)
-    finally:
-        _rooms[room_id].discard(websocket)
-        if not _rooms[room_id]:
-            del _rooms[room_id]
-        # Notify remaining peers of departure
-        await _broadcast(room_id, {"type": "peer_left", "peer_id": peer_id})
+        # Snapshot existing peers before registering the newcomer
+        room = self.rooms.setdefault(room_id, {})
+        existing_peer_ids = list(room.keys())
+
+        # Register
+        room[client_id] = websocket
+        logger.info(
+            "Peer %s joined room '%s' (%d peer(s) now)",
+            client_id, room_id, len(room),
+        )
+
+        # Send the newcomer the list of existing peers.
+        # The client uses this list to know who will initiate offers to her.
+        await self._send(websocket, {
+            "type":   "peer-joined",
+            "peerId": client_id,
+            "peers":  existing_peer_ids,
+        })
+
+        # Notify each existing peer of the newcomer.
+        # Existing peers are the initiators — they will each create an offer.
+        for existing_id, existing_ws in list(room.items()):
+            if existing_id != client_id:
+                await self._send(existing_ws, {
+                    "type":   "peer-joined",
+                    "peerId": client_id,
+                    "peers":  [client_id],
+                })
+
+    def disconnect(self, room_id: str, client_id: str) -> None:
+        """
+        Remove a peer from its room. Deletes the room entry if it becomes empty.
+
+        Args:
+            room_id:   Room the peer is leaving.
+            client_id: The departing peer's ID.
+        """
+        room = self.rooms.get(room_id, {})
+        room.pop(client_id, None)
+
+        if not room:
+            self.rooms.pop(room_id, None)
+            logger.info("Room '%s' is empty — removed.", room_id)
+
+        logger.info("Peer %s left room '%s'.", client_id, room_id)
+
+    # ─── Broadcast ────────────────────────────────────────────────────────────
+
+    async def broadcast_peer_left(self, room_id: str, client_id: str) -> None:
+        """
+        Notify remaining peers that `client_id` has left the room.
+
+        Args:
+            room_id:   The room the peer left.
+            client_id: The ID of the departed peer.
+        """
+        room = self.rooms.get(room_id, {})
+        payload = {"type": "peer-left", "peerId": client_id}
+        for peer_id, ws in list(room.items()):
+            await self._send(ws, payload)
+
+    # ─── Signal Relay ─────────────────────────────────────────────────────────
+
+    async def relay_signal(
+        self,
+        room_id: str,
+        sender_id: str,
+        target_id: str,
+        signal_data: dict,
+    ) -> None:
+        """
+        Forward a WebRTC signaling payload (offer, answer, ICE candidate)
+        directly to the named target peer within the room.
+
+        The `fromId` field is injected server-side so clients cannot spoof
+        the sender identity.
+
+        Args:
+            room_id:     Room context.
+            sender_id:   ID of the peer sending the signal.
+            target_id:   ID of the intended recipient.
+            signal_data: Arbitrary dict — signalType, sdp, candidate, etc.
+        """
+        room = self.rooms.get(room_id, {})
+        target_ws = room.get(target_id)
+
+        if not target_ws:
+            logger.debug(
+                "Relay target '%s' not found in room '%s' — dropped.",
+                target_id, room_id,
+            )
+            return
+
+        payload = {"type": "signal", "fromId": sender_id, **signal_data}
+        await self._send(target_ws, payload)
+
+    # ─── Diagnostics ──────────────────────────────────────────────────────────
+
+    @property
+    def total_connections(self) -> int:
+        """Total number of connected peers across all rooms."""
+        return sum(len(peers) for peers in self.rooms.values())
+
+    @property
+    def room_count(self) -> int:
+        """Number of active rooms."""
+        return len(self.rooms)
+
+    # ─── Internal ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _send(websocket: WebSocket, payload: dict) -> None:
+        """Send a JSON payload to a single WebSocket, swallowing transient errors."""
+        try:
+            await websocket.send_json(payload)
+        except Exception as exc:
+            logger.warning("Send failed: %s", exc)
+
+
+# Module-level singleton — imported by main.py
+manager = ConnectionManager()

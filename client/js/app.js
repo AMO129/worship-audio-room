@@ -8,13 +8,13 @@
  *  - Manages the dual-source playlist engine (factory presets + custom uploads).
  *  - Handles drag-and-drop file ingestion with URL lifecycle management.
  *  - Wires threshold sliders to live AudioManager parameters.
- *  - Provides placeholder room/session logic ready for Phase 5 WebRTC hookup.
+ *  - Connects the Join/Leave buttons to WebRTCClient for live room signaling.
  *
  * @module app
  */
 
 import { AudioManager, EngineState } from './AudioManager.js';
-import { WebRTCManager }            from './webrtc.js';
+import { WebRTCClient }              from './webrtc.js';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -73,8 +73,8 @@ const FACTORY_PRESETS = [
 /** Singleton AudioManager instance */
 const audioManager = new AudioManager();
 
-/** Singleton WebRTCManager instance */
-const webrtcManager = new WebRTCManager();
+/** Singleton WebRTCClient instance (re-created implicitly on each join). */
+const webrtcClient = new WebRTCClient();
 
 /** Whether the audio engine + mic are currently active */
 let isEngineActive = false;
@@ -188,17 +188,19 @@ function bootstrap() {
   // Wire AudioManager state callbacks
   audioManager.onTransition = handleFSMTransition;
 
-  // Wire WebRTCManager callbacks
-  webrtcManager.onPeerJoined   = addPeerCard;
-  webrtcManager.onPeerLeft     = removePeerCard;
-  webrtcManager.onStatusChange = (status, msg) => {
-    // Mirror the WebRTC status into the header connection badge
-    const badgeStatus = (status === 'live') ? 'live' : 'disconnected';
-    setConnectionStatus(badgeStatus, msg);
+  // Wire WebRTCClient callbacks
+  webrtcClient.onPeerJoined   = addPeerCard;
+  webrtcClient.onPeerLeft     = removePeerCard;
+  webrtcClient.onStatusChange = (status, msg) => {
+    // 'connected' and 'live' both map to the 'live' badge style
+    const badgeStatus = (status === 'connected' || status === 'live')
+      ? 'live'
+      : 'disconnected';
+    const displayMsg = status === 'connected'
+      ? `Live · Connected to Room: ${currentRoomId}`
+      : msg;
+    setConnectionStatus(badgeStatus, displayMsg);
     updatePeerCountBadge();
-  };
-  webrtcManager.onLocalPeerId = (id) => {
-    console.log(`[app] Local peer ID: ${id}`);
   };
 
   // Bind all interactive elements
@@ -256,9 +258,9 @@ async function handleEngineToggle() {
     // Phase 4: Start the app render loop
     startRenderLoop();
 
-    // Phase 5: If already in a room, hand the live stream to WebRTC
-    if (webrtcManager.isConnected && audioManager.destinationStream) {
-      webrtcManager.addLocalStream(audioManager.destinationStream);
+    // If already in a room, push the freshly available local track to existing peers
+    if (webrtcClient.isConnected) {
+      webrtcClient.refreshLocalTrack();
     }
 
     // Mark active
@@ -865,8 +867,7 @@ function setNowPlaying(trackName) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Wires the Room ID input, Join, and Leave buttons.
- * Phase 5 will replace placeholder logic with real WebRTC signaling.
+ * Wires the Room ID input, Join, and Leave buttons to WebRTCClient.
  */
 function bindRoomControls() {
   $btnJoin.addEventListener('click', handleJoinRoom);
@@ -880,7 +881,7 @@ function bindRoomControls() {
 
 /**
  * Handles the "Join Room" action.
- * Validates the Room ID, opens the WebSocket signaling connection,
+ * Validates the Room ID, opens the WebSocket signaling channel,
  * then hands the AudioManager's outgoing stream to WebRTC (if live).
  */
 async function handleJoinRoom() {
@@ -903,15 +904,12 @@ async function handleJoinRoom() {
   setConnectionStatus('disconnected', 'Connecting…');
 
   try {
-    // Open the WebSocket signaling channel
-    await webrtcManager.connect(roomId);
+    // Pass the live AudioManager stream (if available) so WebRTCClient can
+    // attach it immediately to any peer connections it creates.
+    const localStream = isEngineActive ? audioManager.destinationStream : null;
+    await webrtcClient.join(roomId, localStream);
 
     currentRoomId = roomId;
-
-    // If the audio engine is already live, share the stream immediately
-    if (isEngineActive && audioManager.destinationStream) {
-      webrtcManager.addLocalStream(audioManager.destinationStream);
-    }
 
     // Update stage info
     $roomModeDisplay.textContent = 'Live';
@@ -936,7 +934,7 @@ async function handleJoinRoom() {
  * Closes all peer connections and the signaling WebSocket.
  */
 function handleLeaveRoom() {
-  webrtcManager.disconnect();
+  webrtcClient.leave();
 
   currentRoomId = null;
 
@@ -970,7 +968,7 @@ const $peerGrid = document.getElementById('peer-grid');
 
 /**
  * Adds a remote peer card to the meeting stage peer grid.
- * Called by webrtcManager.onPeerJoined when a remote MediaStream arrives.
+ * Called by webrtcClient.onPeerJoined when a remote MediaStream arrives.
  *
  * @param {string}      peerId - The remote peer's ID (assigned by the server).
  * @param {MediaStream} stream - The remote peer's audio/video MediaStream.
@@ -1027,7 +1025,7 @@ function addPeerCard(peerId, stream) {
 
 /**
  * Removes a remote peer card from the meeting stage grid.
- * Called by webrtcManager.onPeerLeft.
+ * Called by webrtcClient.onPeerLeft.
  *
  * @param {string} peerId - The peer ID to remove.
  */
@@ -1050,8 +1048,9 @@ function removePeerCard(peerId) {
  * Syncs the peer count badge and participant count display.
  */
 function updatePeerCountBadge() {
-  const total = webrtcManager.peerCount + 1; // +1 for self
-  $peerCountBadge.textContent = `${webrtcManager.peerCount} connected`;
+  const count = webrtcClient.peerCount;
+  const total = count + 1; // +1 for self
+  $peerCountBadge.textContent   = `${count} connected`;
   $participantCount.textContent = String(total);
 }
 
