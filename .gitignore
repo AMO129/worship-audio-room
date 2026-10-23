@@ -1,11 +1,27 @@
-server/venv/ 
-__pycache__/ 
-*.py[cod] 
-*$py.class 
-*.env 
-.vscode/* 
-!.vscode/settings.json 
-.DS_Store 
-Thumbs.db 
-client/assets/pads/* 
+# ── Python ────────────────────────────────────────────────────────────────────
+server/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+.idea/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Audio assets (large binaries — add via Git LFS if needed) ─────────────────
+client/assets/pads/*
 !client/assets/pads/.gitkeep
