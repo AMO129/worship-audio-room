@@ -13,8 +13,8 @@
  * @module app
  */
 
-import { AudioManager, EngineState } from './AudioManager.js';
-import { WebRTCClient }              from './webrtc.js';
+import { AudioManager, EngineState } from './AudioManager.js?v=2';
+import { WebRTCClient }              from './webrtc.js?v=2';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -54,16 +54,63 @@ const FSM_CONFIG = {
 const ALL_FSM_CLASSES = Object.values(FSM_CONFIG).map(c => c.cssClass);
 
 /**
- * Factory preset track definitions.
- * `url` is empty until Phase 5 ships real audio assets — the UI shows the
- * button and shows a graceful "No audio file" toast on click.
+ * Procedural preset definitions.
+ *
+ * Each entry maps to a factory preset list item in index.html (by position).
+ * `type`  → passed to AudioManager.playProceduralPreset() to select the
+ *            synthesis algorithm.
+ * `notes` → frequency array in Hz for each chord voice.
+ *
+ * Note names / tuning reference:
+ *   C3=130.81, G3=196.00, C4=261.63, E4=329.63
+ *   G3=196.00, B3=246.94, D4=293.66, G4=392.00
+ *   D2=73.42,  A2=110.00, D3=146.83, F#3=185.00
+ *   Eb3=155.56,Bb3=233.08,Eb4=311.13,G4=392.00
+ *   A2=110.00, E3=164.81, A3=220.00, C#4=277.18
  */
-const FACTORY_PRESETS = [
-  { id: 'preset-1', name: 'Deep Pad — C Major',        url: '' },
-  { id: 'preset-2', name: 'Warm Strings — G Major',    url: '' },
-  { id: 'preset-3', name: 'Cinematic Drone — D Minor', url: '' },
-  { id: 'preset-4', name: 'Heavenly Choir — E♭ Major', url: '' },
-  { id: 'preset-5', name: 'Altar Piano — A Major',     url: '' },
+const PRESET_DEFINITIONS = {
+  'c-major': {
+    id:    'preset-1',
+    name:  'Deep Pad — C Major',
+    type:  'pad',
+    notes: [130.81, 196.00, 261.63, 329.63],
+  },
+  'g-major': {
+    id:    'preset-2',
+    name:  'Warm Strings — G Major',
+    type:  'strings',
+    notes: [196.00, 246.94, 293.66, 392.00],
+  },
+  'd-minor-drone': {
+    id:    'preset-3',
+    name:  'Cinematic Drone — D Major',
+    type:  'drone',
+    notes: [73.42, 110.00, 146.83, 185.00],
+  },
+  'eb-major': {
+    id:    'preset-4',
+    name:  'Heavenly Choir — E♭ Major',
+    type:  'choir',
+    notes: [155.56, 233.08, 311.13, 392.00],
+  },
+  'a-major': {
+    id:    'preset-5',
+    name:  'Altar Piano — A Major',
+    type:  'piano',
+    notes: [110.00, 164.81, 220.00, 277.18],
+  },
+};
+
+/**
+ * Ordered array of preset keys matching the DOM order in index.html.
+ * Index 0 → first <li> in #panel-presets, index 4 → last <li>.
+ */
+const PRESET_KEYS_ORDERED = [
+  'c-major',
+  'g-major',
+  'd-minor-drone',
+  'eb-major',
+  'a-major',
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -542,22 +589,25 @@ function activateTab(tab) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Wires preset track "Play / Crossfade" buttons from the static HTML list.
- * Data is read from data attributes on the .track-item elements.
+ * Wires preset track "Crossfade" buttons from the static HTML list.
+ *
+ * Each button triggers `audioManager.playProceduralPreset()` with the
+ * corresponding synthesised chord voicing — no audio files required.
  */
 function bindFactoryPresets() {
   $presetTrackItems.forEach((item, index) => {
-    const preset = FACTORY_PRESETS[index];
+    const key    = PRESET_KEYS_ORDERED[index];
+    const preset = PRESET_DEFINITIONS[key];
     if (!preset) return;
 
-    // Store id on the DOM element for active-track highlighting
+    // Stamp the preset id onto the DOM element for active-track highlighting
     item.dataset.trackId = preset.id;
 
     const $playBtn = item.querySelector('.btn-play-track');
     if (!$playBtn) return;
 
     $playBtn.addEventListener('click', () => {
-      playTrack(preset.id, preset.name, preset.url);
+      playProceduralTrack(preset);
     });
   });
 }
@@ -795,30 +845,76 @@ function syncCustomPlaylistMeta() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Plays or crossfades to a track by its URL.
- * Updates the active-track highlight and now-playing pill.
+ * Triggers a procedural synthesised preset via AudioManager.
+ *
+ * - Fades out any running procedural preset (cross-dissolve).
+ * - Calls `audioManager.playProceduralPreset()` with the preset's timbre
+ *   type and chord frequencies.
+ * - Updates the active-track highlight and now-playing pill.
+ * - Guard: engine must be initialised (init() called) but mic is NOT required
+ *   — the user can audition synth pads before enabling the mic.
+ *
+ * @param {{ id: string, name: string, type: string, notes: number[] }} preset
+ */
+async function playProceduralTrack(preset) {
+  // Auto-initialise the AudioContext on first user gesture if needed.
+  // Synth pads do NOT require the mic — they only need the audio graph.
+  if (!audioManager.ctx) {
+    try {
+      await audioManager.init();
+    } catch (err) {
+      console.error('[app] AudioManager init failed:', err);
+      showAlert('Could not initialise the audio engine. Please try again.', 'error');
+      return;
+    }
+  }
+
+  // Deactivate previous row highlight
+  clearActiveTrackHighlight();
+
+  try {
+    await audioManager.playProceduralPreset(preset.type, preset.notes, 2.0);
+
+    // Update UI
+    activeTrackId = preset.id;
+    highlightActiveTrack(preset.id);
+    setNowPlaying(preset.name);
+  } catch (err) {
+    console.error('[app] Procedural preset error:', err);
+    showAlert(`Could not start preset "${preset.name}": ${err.message}`, 'error');
+  }
+}
+
+/**
+ * Plays or crossfades to a file-based track by its URL.
+ * Used exclusively by the Custom Playlist panel.
+ *
+ * Before starting file playback, any active procedural synth preset is faded
+ * out cleanly to prevent audio layering.
  *
  * @param {string} trackId   - Unique track identifier.
  * @param {string} trackName - Display name for the now-playing indicator.
- * @param {string} url       - Audio URL (file path, Blob URL, or CDN link).
+ * @param {string} url       - Blob URL (custom upload) or CDN link.
  */
 function playTrack(trackId, trackName, url) {
-  // Guard: engine must be active to crossfade
+  // Guard: engine must be active to crossfade file audio
   if (!isEngineActive) {
     showAlert('Enable the Audio Engine first (click "Enable Mic" button).', 'info');
     return;
   }
 
-  // Guard: no URL available for factory presets yet
   if (!url) {
-    showAlert(`"${trackName}" has no audio file yet. Add it to /client/assets/pads/ in Phase 5.`, 'info');
+    showAlert(`"${trackName}" has no audio file attached.`, 'warn');
     return;
   }
+
+  // Fade out any running procedural synth preset before playing a file
+  audioManager.stopProceduralPreset(1.5);
 
   // Deactivate previous track row
   clearActiveTrackHighlight();
 
-  // Crossfade via AudioManager
+  // Crossfade via AudioManager deck engine
   audioManager.crossfadeTo(url);
 
   // Mark new active track

@@ -88,13 +88,14 @@ function computeRmsDb(buffer) {
  *
  * Central audio processing hub for Worship Audio Room.
  * Manages mic ingestion, voice-isolation DSP chain, 3-state FSM ducking,
- * and the equal-power crossfading deck engine.
+ * the equal-power crossfading deck engine, and the procedural synth bus.
  *
  * Usage:
  *   const am = new AudioManager();
  *   await am.init();           // unlock AudioContext (call from user gesture)
  *   await am.attachMicrophone();
- *   am.crossfadeTo('/assets/pads/pad-a.mp3');
+ *   am.crossfadeTo('/assets/pads/pad-a.mp3');   // file-based deck
+ *   am.playProceduralPreset('pad', [130.81, 196, 261.63, 329.63]); // synth
  *   am.onStateChange = (state, db) => updateUI(state, db);
  */
 export class AudioManager {
@@ -110,8 +111,20 @@ export class AudioManager {
     // ── Output destinations ───────────────────────────────────────────────────
     /** MediaStreamDestination — carries outgoing mix (music + voice) for WebRTC */
     this._destinationNode = null;
-    /** Master gain for the music bus; FSM writes to this node's gain param */
+    /**
+     * FSM-controlled music bus gain (values: 0.20 / 0.40 / 0.80).
+     * The FSM writes to this node exclusively.
+     */
     this._masterMusicGain = null;
+    /**
+     * User-facing master volume node — sits downstream of _masterMusicGain.
+     * Controlled by setMasterGain() / the Master Gain slider.
+     * Default: 1.0 (full pass-through).
+     */
+    this._masterVolumeGain = null;
+
+    /** Last computed RMS level in dBFS. Exposed via getCurrentDecibels(). */
+    this._currentDb = -Infinity;
 
     // ── Deck Engine — dual HTML audio element players ─────────────────────────
     /** @type {HTMLAudioElement} */ this._playerA = null;
@@ -183,6 +196,22 @@ export class AudioManager {
      * @type {((newState: string, prevState: string) => void) | null}
      */
     this.onTransition = null;
+
+    // ── Procedural Synth Bus ──────────────────────────────────────────────────
+    /**
+     * Master gain node for the procedural synth bus.
+     * Sits in parallel with the deck engine, both feeding into _masterMusicGain.
+     * Initialised to 0 (silent) — ramped up by playProceduralPreset().
+     * @type {GainNode|null}
+     */
+    this.synthGain = null;
+
+    /**
+     * All active oscillator, filter, and LFO nodes for the current procedural
+     * preset. Cleared and recreated on each playProceduralPreset() call.
+     * @type {AudioNode[]}
+     */
+    this.synthNodes = [];
   }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -199,15 +228,24 @@ export class AudioManager {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
     // ── Build music bus ───────────────────────────────────────────────────────
-    // masterMusicGain → ctx.destination (local monitor)
-    // masterMusicGain → destinationNode (outgoing WebRTC stream)
+    // Node chain:
+    //   deckA/B gainNodes → _masterMusicGain (FSM duck) → _masterVolumeGain (user) → destinations
+
+    // FSM duck layer — values written by _updateFSM()
     this._masterMusicGain = this.ctx.createGain();
-    this._masterMusicGain.gain.value = this.VOL_SWELL; // initial state: SWELL
+    this._masterMusicGain.gain.value = this.VOL_SWELL; // initial: SWELL = 80%
 
+    // User volume layer — controlled by setMasterGain() slider
+    this._masterVolumeGain = this.ctx.createGain();
+    this._masterVolumeGain.gain.value = 1.0; // pass-through by default
+
+    // Connect FSM layer → volume layer
+    this._masterMusicGain.connect(this._masterVolumeGain);
+
+    // Connect volume layer → output destinations
     this._destinationNode = this.ctx.createMediaStreamDestination();
-
-    this._masterMusicGain.connect(this.ctx.destination);
-    this._masterMusicGain.connect(this._destinationNode);
+    this._masterVolumeGain.connect(this.ctx.destination);
+    this._masterVolumeGain.connect(this._destinationNode);
 
     // ── Build dual-deck gain nodes ────────────────────────────────────────────
     this._gainNodeA = this.ctx.createGain();
@@ -217,6 +255,13 @@ export class AudioManager {
     this._gainNodeB = this.ctx.createGain();
     this._gainNodeB.gain.value = 0;
     this._gainNodeB.connect(this._masterMusicGain);
+
+    // ── Build procedural synth bus ────────────────────────────────────────────
+    // Sits in parallel with the deck engine; both merge at _masterMusicGain
+    // so the FSM ducking sidechain governs all music sources uniformly.
+    this.synthGain = this.ctx.createGain();
+    this.synthGain.gain.setValueAtTime(0, this.ctx.currentTime); // muted until preset is loaded
+    this.synthGain.connect(this._masterMusicGain);
 
     // ── Create HTML audio elements for deck playback ───────────────────────────
     this._playerA = this._createAudioElement();
@@ -230,6 +275,13 @@ export class AudioManager {
    */
   destroy() {
     this._stopAnalysisLoop();
+
+    // Stop procedural synth immediately (no fade — context is closing)
+    for (const node of this.synthNodes) {
+      try { node.stop?.(); } catch (_) {}
+      try { node.disconnect(); } catch (_) {}
+    }
+    this.synthNodes = [];
 
     if (this._micStream) {
       this._micStream.getTracks().forEach(t => t.stop());
@@ -354,6 +406,9 @@ export class AudioManager {
     // Pull time-domain samples (PCM floats in [-1, 1])
     this._voiceAnalyser.getFloatTimeDomainData(this._timeDomainBuffer);
     const db = computeRmsDb(this._timeDomainBuffer);
+
+    // Cache latest dB reading for polling via getCurrentDecibels()
+    this._currentDb = db;
 
     // Drive the FSM
     this._updateFSM(db);
@@ -556,6 +611,302 @@ export class AudioManager {
     );
   }
 
+  // ─── Procedural Synth Engine ──────────────────────────────────────────────────
+
+  /**
+   * Synthesises and plays a worship pad preset using Web Audio oscillators.
+   *
+   * All synthesis nodes are routed through `this.synthGain`, which connects to
+   * `_masterMusicGain` so the FSM ducking sidechain governs volume automatically.
+   *
+   * Sound design per presetType:
+   *  'pad' / 'strings' — Detuned sawtooth + triangle pairs per note, 24 dB/oct
+   *                       lowpass at 550 Hz, slow LFO sweeping the cutoff.
+   *  'drone'           — Sine sub-octave reinforcement, lowpass at 350 Hz,
+   *                       slow pitch vibrato via a dedicated LFO.
+   *  'choir'           — Sine base tones + dual peaking (formant) filters at
+   *                       800 Hz and 2.4 kHz with slight shimmer detuning.
+   *  'piano'           — Sine/triangle mix with a soft exponential decay into
+   *                       a warm sustain tail (electric-Rhodes character).
+   *
+   * @param {'pad'|'strings'|'drone'|'choir'|'piano'} presetType
+   * @param {number[]} frequencies  Array of note frequencies in Hz.
+   * @param {number}   [fadeTime=2.0]  Cross-fade duration in seconds.
+   * @returns {Promise<void>}
+   */
+  async playProceduralPreset(presetType, frequencies, fadeTime = 2.0) {
+    if (!this.ctx) {
+      console.warn('[AudioManager] playProceduralPreset() called before init().');
+      return;
+    }
+
+    // Resume a suspended AudioContext (browser autoplay policy)
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+
+    const now = this.ctx.currentTime;
+
+    // ── Fade out and tear down any previously running synth nodes ─────────────
+    if (this.synthNodes.length > 0) {
+      this.synthGain.gain.cancelScheduledValues(now);
+      this.synthGain.gain.setValueAtTime(this.synthGain.gain.value, now);
+      this.synthGain.gain.linearRampToValueAtTime(0.0001, now + fadeTime);
+
+      // Stop oscillators after the fade completes
+      const nodesToStop = [...this.synthNodes];
+      setTimeout(() => {
+        for (const node of nodesToStop) {
+          try { node.stop?.(); } catch (_) { /* already stopped */ }
+          try { node.disconnect(); } catch (_) { /* already disconnected */ }
+        }
+      }, (fadeTime + 0.1) * 1000);
+
+      this.synthNodes = [];
+    }
+
+    // ── Prepare a fresh preset gain node ─────────────────────────────────────
+    // Re-use this.synthGain (already connected to _masterMusicGain).
+    // Soft-start from near-zero to avoid click artefacts.
+    this.synthGain.gain.cancelScheduledValues(now);
+    this.synthGain.gain.setValueAtTime(0.0001, now);
+
+    // ── Build synthesis network based on preset type ──────────────────────────
+    switch (presetType) {
+
+      // ───────────────────────────────────────────────────────────────────────
+      case 'pad':
+      case 'strings': {
+        // 24 dB/oct lowpass — tames harsh harmonics for a warm pad character
+        const lpf = this.ctx.createBiquadFilter();
+        lpf.type            = 'lowpass';
+        lpf.frequency.value = presetType === 'pad' ? 500 : 600;
+        lpf.Q.value         = 2.0;
+        lpf.connect(this.synthGain);
+        this.synthNodes.push(lpf);
+
+        // LFO sweeps filter cutoff for organic, breathing swell
+        const lfo = this.ctx.createOscillator();
+        lfo.type            = 'sine';
+        lfo.frequency.value = 0.1;  // 10-second period
+
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.value = lpf.frequency.value * 0.3; // ±30% of cutoff
+        lfo.connect(lfoGain);
+        lfoGain.connect(lpf.frequency);
+        lfo.start(now);
+        this.synthNodes.push(lfo, lfoGain);
+
+        // Detuned oscillator pair per note (sawtooth + triangle)
+        for (const freq of frequencies) {
+          const saw = this.ctx.createOscillator();
+          saw.type            = 'sawtooth';
+          saw.frequency.value = freq;
+          saw.detune.value    = -6; // slightly flat saw
+
+          const tri = this.ctx.createOscillator();
+          tri.type            = 'triangle';
+          tri.frequency.value = freq;
+          tri.detune.value    = +6; // slightly sharp triangle
+
+          // Per-voice gain to prevent clipping on dense chords
+          const voiceGain = this.ctx.createGain();
+          voiceGain.gain.value = 0.18 / frequencies.length;
+
+          saw.connect(voiceGain);
+          tri.connect(voiceGain);
+          voiceGain.connect(lpf);
+
+          saw.start(now);
+          tri.start(now);
+          this.synthNodes.push(saw, tri, voiceGain);
+        }
+        break;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      case 'drone': {
+        // Deep lowpass — reinforces bass weight, removes presence harshness
+        const lpf = this.ctx.createBiquadFilter();
+        lpf.type            = 'lowpass';
+        lpf.frequency.value = 350;
+        lpf.Q.value         = 1.5;
+        lpf.connect(this.synthGain);
+        this.synthNodes.push(lpf);
+
+        for (const freq of frequencies) {
+          // Sub-octave sine for chest-filling low-end
+          const sub = this.ctx.createOscillator();
+          sub.type            = 'sine';
+          sub.frequency.value = freq / 2;
+
+          // Detuned sawtooth for body/texture
+          const saw = this.ctx.createOscillator();
+          saw.type            = 'sawtooth';
+          saw.frequency.value = freq;
+          saw.detune.value    = -8;
+
+          // Slow pitch vibrato LFO per voice (slightly offset per note for life)
+          const vibratoLFO  = this.ctx.createOscillator();
+          vibratoLFO.type            = 'sine';
+          vibratoLFO.frequency.value = 0.08 + Math.random() * 0.04; // 0.08–0.12 Hz
+
+          const vibratoDepth = this.ctx.createGain();
+          vibratoDepth.gain.value = 3; // ±3 cents of pitch drift
+          vibratoLFO.connect(vibratoDepth);
+          vibratoDepth.connect(saw.detune);
+          vibratoLFO.start(now);
+
+          const voiceGain = this.ctx.createGain();
+          voiceGain.gain.value = 0.22 / frequencies.length;
+
+          sub.connect(voiceGain);
+          saw.connect(voiceGain);
+          voiceGain.connect(lpf);
+
+          sub.start(now);
+          saw.start(now);
+          this.synthNodes.push(sub, saw, vibratoLFO, vibratoDepth, voiceGain);
+        }
+        break;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      case 'choir': {
+        // Dual formant (peaking) filters simulate vowel resonance chambers
+        const formant1 = this.ctx.createBiquadFilter();
+        formant1.type            = 'peaking';
+        formant1.frequency.value = 800;   // first vowel formant (F1)
+        formant1.Q.value         = 4.0;
+        formant1.gain.value      = 9;     // dB boost
+
+        const formant2 = this.ctx.createBiquadFilter();
+        formant2.type            = 'peaking';
+        formant2.frequency.value = 2400;  // second vowel formant (F2)
+        formant2.Q.value         = 5.0;
+        formant2.gain.value      = 7;
+
+        formant1.connect(formant2);
+        formant2.connect(this.synthGain);
+        this.synthNodes.push(formant1, formant2);
+
+        // Slow shimmer LFO — gently modulates formant frequencies for an
+        // "ahh" breathing quality
+        const shimmerLFO  = this.ctx.createOscillator();
+        shimmerLFO.type            = 'sine';
+        shimmerLFO.frequency.value = 0.15;
+
+        const shimmerGain = this.ctx.createGain();
+        shimmerGain.gain.value = 40; // ±40 Hz sweep on F1
+
+        shimmerLFO.connect(shimmerGain);
+        shimmerGain.connect(formant1.frequency);
+        shimmerLFO.start(now);
+        this.synthNodes.push(shimmerLFO, shimmerGain);
+
+        for (const freq of frequencies) {
+          // Slightly detuned sine pair for shimmer
+          const s1 = this.ctx.createOscillator();
+          s1.type            = 'sine';
+          s1.frequency.value = freq;
+          s1.detune.value    = -4;
+
+          const s2 = this.ctx.createOscillator();
+          s2.type            = 'sine';
+          s2.frequency.value = freq;
+          s2.detune.value    = +4;
+
+          const voiceGain = this.ctx.createGain();
+          voiceGain.gain.value = 0.16 / frequencies.length;
+
+          s1.connect(voiceGain);
+          s2.connect(voiceGain);
+          voiceGain.connect(formant1);
+
+          s1.start(now);
+          s2.start(now);
+          this.synthNodes.push(s1, s2, voiceGain);
+        }
+        break;
+      }
+
+      // ───────────────────────────────────────────────────────────────────────
+      case 'piano': {
+        // Warm bell / electric Rhodes character:
+        // Each note gets a sine + triangle hit with a fast exponential decay
+        // into a quiet sustain tail — emulates hammer strike with resonance.
+        for (const freq of frequencies) {
+          const sine = this.ctx.createOscillator();
+          sine.type            = 'sine';
+          sine.frequency.value = freq;
+
+          const tri = this.ctx.createOscillator();
+          tri.type            = 'triangle';
+          tri.frequency.value = freq;
+          tri.detune.value    = +2;
+
+          // Per-note envelope gain: fast attack, exponential decay to sustain
+          const envGain = this.ctx.createGain();
+          const peakAmp = 0.35 / frequencies.length;
+          const sustainAmp = peakAmp * 0.3; // sustain at 30% of peak
+
+          // Immediate strike
+          envGain.gain.setValueAtTime(0.0001, now);
+          envGain.gain.linearRampToValueAtTime(peakAmp, now + 0.015); // 15 ms attack
+          // Decay to sustain level over ~1.8 s (exponential feel)
+          envGain.gain.setTargetAtTime(sustainAmp, now + 0.015, 0.6);
+
+          sine.connect(envGain);
+          tri.connect(envGain);
+          envGain.connect(this.synthGain);
+
+          sine.start(now);
+          tri.start(now);
+          this.synthNodes.push(sine, tri, envGain);
+        }
+        break;
+      }
+
+      default:
+        console.warn(`[AudioManager] Unknown presetType: "${presetType}"`);
+        return;
+    }
+
+    // ── Fade synthGain up to full level ───────────────────────────────────────
+    this.synthGain.gain.linearRampToValueAtTime(1.0, now + fadeTime);
+
+    console.log(
+      `[AudioManager] Procedural preset "${presetType}" started ` +
+      `(${frequencies.length} notes, fade ${fadeTime}s).`
+    );
+  }
+
+  /**
+   * Fades out and stops all active procedural synth nodes.
+   *
+   * @param {number} [fadeTime=1.5]  Fade-out duration in seconds.
+   */
+  stopProceduralPreset(fadeTime = 1.5) {
+    if (!this.ctx || this.synthNodes.length === 0) return;
+
+    const now = this.ctx.currentTime;
+
+    this.synthGain.gain.cancelScheduledValues(now);
+    this.synthGain.gain.setValueAtTime(this.synthGain.gain.value, now);
+    this.synthGain.gain.linearRampToValueAtTime(0.0001, now + fadeTime);
+
+    const nodesToStop = [...this.synthNodes];
+    this.synthNodes = [];
+
+    setTimeout(() => {
+      for (const node of nodesToStop) {
+        try { node.stop?.(); } catch (_) { /* already stopped */ }
+        try { node.disconnect(); } catch (_) { /* already disconnected */ }
+      }
+      console.log('[AudioManager] Procedural preset stopped.');
+    }, (fadeTime + 0.1) * 1000);
+  }
+
   // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
   /**
@@ -572,13 +923,51 @@ export class AudioManager {
     return el;
   }
 
-  // ─── Public Getters ───────────────────────────────────────────────────────────
+  // ─── Public Getters & Methods ─────────────────────────────────────────────────
 
   /**
    * The current FSM state.
    * @returns {string} One of EngineState.SWELL | CONVERSATIONAL | CLIMAX
    */
   get state() { return this._state; }
+
+  /**
+   * Alias for `state` — used by app.js render loop.
+   * @returns {string}
+   */
+  get currentState() { return this._state; }
+
+  /**
+   * Returns the most recently computed RMS level in dBFS.
+   * Updated every animation frame by _processTick().
+   * Returns -Infinity when the engine is not active.
+   * @returns {number}
+   */
+  getCurrentDecibels() {
+    return this._currentDb;
+  }
+
+  /**
+   * Sets the user-facing master volume level independently of FSM ducking.
+   *
+   * Architecture:
+   *   _masterMusicGain (FSM) → _masterVolumeGain (user) → destinations
+   *
+   * This node sits downstream of the FSM duck layer so both operate
+   * independently without interfering with each other.
+   *
+   * @param {number} linearValue - Gain from 0.0 (silence) to 1.0 (full).
+   */
+  setMasterGain(linearValue) {
+    const clamped = Math.min(Math.max(linearValue, 0), 1);
+    if (!this._masterVolumeGain) return;
+    // Use setTargetAtTime for a smooth 50ms ramp on slider drag
+    this._masterVolumeGain.gain.setTargetAtTime(
+      clamped,
+      this.ctx.currentTime,
+      0.05  // τ = 50 ms — imperceptibly fast but avoids zipper noise
+    );
+  }
 
   /**
    * The underlying AudioContext (for external node graph extensions).
@@ -606,8 +995,7 @@ export class AudioManager {
   }
 
   /**
-   * The master music gain node. Useful for external monitoring or UI binding.
-   * Do not schedule gain changes directly — use the FSM instead.
+   * The FSM-level music gain node (read-only reference for diagnostics).
    * @returns {GainNode|null}
    */
   get masterMusicGain() { return this._masterMusicGain; }
