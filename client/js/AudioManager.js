@@ -142,6 +142,9 @@ export class AudioManager {
     /** Reusable time-domain sample buffer */
     this._timeDomainBuffer = null;
 
+    /** @type {boolean} Track playback state of music (decks + synth) */
+    this._isMusicPlaying = false;
+
     // ── FSM State ─────────────────────────────────────────────────────────────
     /** @type {string} */ this._state = EngineState.SWELL;
     /** Timestamp (ms) when silence began; null if currently speaking */
@@ -268,6 +271,82 @@ export class AudioManager {
     this._playerB = this._createAudioElement();
 
     console.log('[AudioManager] Initialised. AudioContext state:', this.ctx.state);
+  }
+
+  /**
+   * Global Pause: Stops the deck players and mutes the synth bus.
+   */
+  pauseMusic() {
+    if (!this.ctx) return;
+    this._isMusicPlaying = false;
+
+    // Pause decks
+    this._playerA.pause();
+    this._playerB.pause();
+
+    // Mute synth (we don't stop oscillators to allow "resume" if we wanted,
+    // but here we might just ramp gain to 0).
+    const now = this.ctx.currentTime;
+    this.synthGain.gain.cancelScheduledValues(now);
+    this.synthGain.gain.setTargetAtTime(0, now, 0.1);
+
+    console.log('[AudioManager] Music paused.');
+  }
+
+  /**
+   * Global Resume: Starts the active deck player and restores synth bus gain.
+   */
+  resumeMusic() {
+    if (!this.ctx) return Promise.resolve();
+
+    return (async () => {
+      if (this.ctx.state === 'suspended') await this.ctx.resume();
+
+      const activePlayer = this._activeDeck === 'A' ? this._playerA : this._playerB;
+      if (activePlayer.src) await activePlayer.play();
+
+      if (this.synthNodes.length > 0) {
+        const now = this.ctx.currentTime;
+        this.synthGain.gain.cancelScheduledValues(now);
+        this.synthGain.gain.setTargetAtTime(1.0, now, 0.02);
+      }
+
+      this._isMusicPlaying = true;
+      console.log('[AudioManager] Music resumed.');
+    })();
+  }
+
+  /** Stop microphone capture and analysis without interrupting music playback. */
+  detachMicrophone() {
+    this._stopAnalysisLoop();
+    this._micSource?.disconnect();
+    this._voiceBPF?.disconnect();
+    this._voiceAnalyser?.disconnect();
+    this._micSource = null;
+    this._voiceBPF = null;
+    this._voiceAnalyser = null;
+    this._timeDomainBuffer = null;
+
+    if (this._micStream) {
+      this._micStream.getTracks().forEach((track) => track.stop());
+      this._micStream = null;
+    }
+
+    this._currentDb = -Infinity;
+    this._silenceStart = null;
+    if (this.ctx && this._masterMusicGain) {
+      const previousState = this._state;
+      this._state = EngineState.SWELL;
+      this._masterMusicGain.gain.setTargetAtTime(
+        this.VOL_SWELL,
+        this.ctx.currentTime,
+        0.02,
+      );
+      if (previousState !== EngineState.SWELL) {
+        this.onTransition?.(EngineState.SWELL, previousState);
+      }
+      this.onStateChange?.(EngineState.SWELL, -Infinity);
+    }
   }
 
   /**
@@ -584,6 +663,8 @@ export class AudioManager {
       console.error('[AudioManager] crossfadeTo playback error:', err);
     });
 
+    this._isMusicPlaying = true;
+
     // ── Schedule equal-power crossfade gains ──────────────────────────────────
     // Incoming: linear ramp 0 → 1
     inGain.gain.linearRampToValueAtTime(1.0, endTime);
@@ -874,6 +955,8 @@ export class AudioManager {
 
     // ── Fade synthGain up to full level ───────────────────────────────────────
     this.synthGain.gain.linearRampToValueAtTime(1.0, now + fadeTime);
+
+    this._isMusicPlaying = true;
 
     console.log(
       `[AudioManager] Procedural preset "${presetType}" started ` +

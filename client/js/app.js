@@ -8,13 +8,13 @@
  *  - Manages the dual-source playlist engine (factory presets + custom uploads).
  *  - Handles drag-and-drop file ingestion with URL lifecycle management.
  *  - Wires threshold sliders to live AudioManager parameters.
- *  - Connects the Join/Leave buttons to WebRTCClient for live room signaling.
+ *  - WebRTCManager: deep-linked room sharing, multi-peer mesh, live chat.
  *
  * @module app
  */
 
-import { AudioManager, EngineState } from './AudioManager.js?v=2';
-import { WebRTCClient }              from './webrtc.js?v=2';
+import { AudioManager, EngineState } from './AudioManager.js?v=3';
+import { WebRTCManager }              from './WebRTCManager.js?v=5';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -120,8 +120,8 @@ const PRESET_KEYS_ORDERED = [
 /** Singleton AudioManager instance */
 const audioManager = new AudioManager();
 
-/** Singleton WebRTCClient instance (re-created implicitly on each join). */
-const webrtcClient = new WebRTCClient();
+/** Singleton WebRTCManager instance (re-created implicitly on each join). */
+const webrtcClient = new WebRTCManager();
 
 /** Whether the audio engine + mic are currently active */
 let isEngineActive = false;
@@ -210,6 +210,7 @@ const $btnClearPlaylist = document.getElementById('btn-clear-playlist');
 // -- Now Playing --
 const $nowPlayingPill   = document.getElementById('now-playing-pill');
 const $nowPlayingTitle  = document.getElementById('now-playing-title');
+const $btnPlayPause     = document.getElementById('btn-play-pause');
 
 // -- Stage / Peer --
 const $localSpeakingRing = document.getElementById('local-speaking-indicator');
@@ -224,14 +225,86 @@ const $metricLatency    = document.getElementById('metric-latency');
 const $metricOutput     = document.getElementById('metric-output');
 const $metricEngine     = document.getElementById('metric-engine');
 
+// -- Chat --
+const $chatMessages   = document.getElementById('chat-messages');
+const $chatInput      = document.getElementById('chat-input');
+const $btnChatSend    = document.getElementById('btn-chat-send');
+const $chatUsername   = document.getElementById('chat-username');
+const $chatUnreadBadge = document.getElementById('chat-unread-badge');
+const $btnEmojiPicker = document.getElementById('btn-emoji-picker');
+const $emojiPicker    = document.getElementById('emoji-picker');
+
+// -- Room sharing --
+const $btnCopyLink    = document.getElementById('btn-copy-link');
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // BOOTSTRAP
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Reads the `?room=` query param from the URL and pre-fills the Room ID input.
+ * Called at the very start of bootstrap so the field is set before any binding.
+ */
+function applyDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  const roomParam = params.get('room');
+  if (roomParam && $roomIdInput) {
+    $roomIdInput.value = roomParam;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Binds the global Music Play/Pause toggle.
+ * Operates independently of the microphone engine.
+ */
+function bindPlayPause() {
+  $btnPlayPause?.addEventListener('click', () => {
+    if (!audioManager.ctx) {
+      showAlert('Select a track to start playback.', 'info');
+      return;
+    }
+
+    if (audioManager._isMusicPlaying) {
+      audioManager.pauseMusic();
+      updatePlayPauseUI();
+    } else {
+      audioManager.resumeMusic().then(updatePlayPauseUI).catch((err) => {
+        console.error('[app] Music resume failed:', err);
+        showAlert('Could not start background audio. Please try again.', 'warn');
+      });
+    }
+  });
+}
+
+/**
+ * Updates the Play/Pause button icons based on current playback state.
+ */
+function updatePlayPauseUI() {
+  if (!$btnPlayPause) return;
+
+  const isPlaying = audioManager._isMusicPlaying;
+  const $playIcon  = $btnPlayPause.querySelector('.icon-play');
+  const $pauseIcon = $btnPlayPause.querySelector('.icon-pause');
+
+  if (isPlaying) {
+    $playIcon.style.display = 'none';
+    $pauseIcon.style.display = 'block';
+    $btnPlayPause.classList.add('is-playing');
+  } else {
+    $playIcon.style.display = 'block';
+    $pauseIcon.style.display = 'none';
+    $btnPlayPause.classList.remove('is-playing');
+  }
+}
+
+/**
  * Main application entry point. Called once on DOMContentLoaded.
  */
 function bootstrap() {
+  const shouldAutoJoin = applyDeepLink();
+
   // Wire AudioManager state callbacks
   audioManager.onTransition = handleFSMTransition;
 
@@ -244,7 +317,7 @@ function bootstrap() {
       ? 'live'
       : 'disconnected';
     const displayMsg = status === 'connected'
-      ? `Live · Connected to Room: ${currentRoomId}`
+      ? `Live · Connected to Room: ${currentRoomId ?? $roomIdInput.value}`
       : msg;
     setConnectionStatus(badgeStatus, displayMsg);
     updatePeerCountBadge();
@@ -258,11 +331,16 @@ function bootstrap() {
   bindFactoryPresets();
   bindCustomPlaylist();
   bindRoomControls();
+  bindCopyLink();
+  bindChat();
+  bindPlayPause();
 
   // Initialise UI to a known idle state
   syncFSMBadge(EngineState.SWELL);
   updateVuMeter(-Infinity);
   updateFooterMetrics();
+
+  if (shouldAutoJoin) handleJoinRoom();
 
   console.log('[app] Bootstrap complete.');
 }
@@ -332,7 +410,7 @@ async function handleEngineToggle() {
  */
 function deactivateEngine() {
   stopRenderLoop();
-  audioManager.destroy();
+  audioManager.detachMicrophone();
 
   isEngineActive = false;
   $btnEngineToggle.setAttribute('aria-pressed', 'false');
@@ -874,11 +952,13 @@ async function playProceduralTrack(preset) {
 
   try {
     await audioManager.playProceduralPreset(preset.type, preset.notes, 2.0);
+    webrtcClient.refreshLocalTrack();
 
     // Update UI
     activeTrackId = preset.id;
     highlightActiveTrack(preset.id);
     setNowPlaying(preset.name);
+    updatePlayPauseUI();
   } catch (err) {
     console.error('[app] Procedural preset error:', err);
     showAlert(`Could not start preset "${preset.name}": ${err.message}`, 'error');
@@ -896,17 +976,14 @@ async function playProceduralTrack(preset) {
  * @param {string} trackName - Display name for the now-playing indicator.
  * @param {string} url       - Blob URL (custom upload) or CDN link.
  */
-function playTrack(trackId, trackName, url) {
-  // Guard: engine must be active to crossfade file audio
-  if (!isEngineActive) {
-    showAlert('Enable the Audio Engine first (click "Enable Mic" button).', 'info');
-    return;
-  }
-
+async function playTrack(trackId, trackName, url) {
   if (!url) {
     showAlert(`"${trackName}" has no audio file attached.`, 'warn');
     return;
   }
+
+  if (!audioManager.ctx) await audioManager.init();
+  if (audioManager.ctx.state === 'suspended') await audioManager.ctx.resume();
 
   // Fade out any running procedural synth preset before playing a file
   audioManager.stopProceduralPreset(1.5);
@@ -916,11 +993,13 @@ function playTrack(trackId, trackName, url) {
 
   // Crossfade via AudioManager deck engine
   audioManager.crossfadeTo(url);
+  webrtcClient.refreshLocalTrack();
 
   // Mark new active track
   activeTrackId = trackId;
   highlightActiveTrack(trackId);
   setNowPlaying(trackName);
+  updatePlayPauseUI();
 }
 
 /**
@@ -1000,12 +1079,25 @@ async function handleJoinRoom() {
   setConnectionStatus('disconnected', 'Connecting…');
 
   try {
-    // Pass the live AudioManager stream (if available) so WebRTCClient can
+    // Pass the live AudioManager stream (if available) so WebRTCManager can
     // attach it immediately to any peer connections it creates.
-    const localStream = isEngineActive ? audioManager.destinationStream : null;
-    await webrtcClient.join(roomId, localStream);
+    const userName = $chatUsername?.value?.trim() || 'Host';
+    await webrtcClient.join(roomId, audioManager, userName);
 
     currentRoomId = roomId;
+
+    // Push room to URL for deep linking / sharing
+    const roomUrl = new URL(window.location.href);
+    roomUrl.searchParams.set('room', roomId);
+    window.history.pushState({}, '', `${roomUrl.pathname}${roomUrl.search}${roomUrl.hash}`);
+
+    // Enable copy link button
+    if ($btnCopyLink) $btnCopyLink.disabled = false;
+
+    // Enable chat
+    if ($chatInput)   $chatInput.disabled   = false;
+    if ($btnChatSend) $btnChatSend.disabled = false;
+    if ($btnEmojiPicker) $btnEmojiPicker.disabled = false;
 
     // Update stage info
     $roomModeDisplay.textContent = 'Live';
@@ -1016,6 +1108,7 @@ async function handleJoinRoom() {
     console.log(`[app] Joined room: ${roomId}`);
   } catch (err) {
     console.error('[app] Join room failed:', err);
+    webrtcClient.leave();
     showAlert(`Could not connect to room "${roomId}". Is the server running?`, 'error');
 
     // Re-enable controls so the user can retry
@@ -1031,6 +1124,17 @@ async function handleJoinRoom() {
  */
 function handleLeaveRoom() {
   webrtcClient.leave();
+
+  // Reset URL
+  const url = new URL(window.location.href);
+  url.searchParams.delete('room');
+  window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  if ($btnCopyLink) $btnCopyLink.disabled = true;
+  if ($chatInput)   $chatInput.disabled   = true;
+  if ($btnChatSend) $btnChatSend.disabled = true;
+  if ($btnEmojiPicker) $btnEmojiPicker.disabled = true;
+  if ($emojiPicker) $emojiPicker.hidden = true;
+  $btnEmojiPicker?.setAttribute('aria-expanded', 'false');
 
   currentRoomId = null;
 
@@ -1103,14 +1207,6 @@ function addPeerCard(peerId, stream) {
       </div>
     </div>
   `;
-
-  // Create an Audio element to play the remote stream
-  const $audio = document.createElement('audio');
-  $audio.srcObject = stream;
-  $audio.autoplay  = true;
-  $audio.muted     = false; // must be false — attendees hear the mix
-  $audio.style.display = 'none';
-  li.appendChild($audio);
 
   $peerGrid.appendChild(li);
   peerElements.set(peerId, li);
@@ -1297,6 +1393,154 @@ function showAlert(message, type = 'info') {
   `;
   document.head.appendChild(style);
 }());
+
+/**
+ * Binds the chat interface:
+ * - Enter key to send
+ * - Send button click
+ * - Emoji selector (Phase 6 upgrade)
+ * - Incoming message rendering
+ */
+function bindChat() {
+  const sendMessage = () => {
+    const text = $chatInput.value.trim();
+    if (!text || !webrtcClient.isConnected) return;
+
+    webrtcClient.sendChat(text);
+    $chatInput.value = '';
+    $chatInput.focus();
+  };
+
+  $btnChatSend.addEventListener('click', sendMessage);
+  $chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  // Handle incoming messages
+  webrtcClient.onChatMessage = (msg) => {
+    renderChatMessage(msg);
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+  };
+
+  $btnEmojiPicker?.addEventListener('click', () => {
+    const isOpen = $btnEmojiPicker.getAttribute('aria-expanded') === 'true';
+    $btnEmojiPicker.setAttribute('aria-expanded', String(!isOpen));
+    $emojiPicker.hidden = isOpen;
+  });
+
+  $emojiPicker?.addEventListener('click', (event) => {
+    const button = event.target.closest('.emoji-option');
+    if (!button) return;
+
+    const start = $chatInput.selectionStart ?? $chatInput.value.length;
+    const end = $chatInput.selectionEnd ?? start;
+    $chatInput.setRangeText(button.textContent, start, end, 'end');
+    $chatInput.focus();
+    $emojiPicker.hidden = true;
+    $btnEmojiPicker.setAttribute('aria-expanded', 'false');
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!$emojiPicker?.contains(event.target) && !$btnEmojiPicker?.contains(event.target)) {
+      $emojiPicker.hidden = true;
+      $btnEmojiPicker?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && $emojiPicker && !$emojiPicker.hidden) {
+      $emojiPicker.hidden = true;
+      $btnEmojiPicker?.setAttribute('aria-expanded', 'false');
+      $btnEmojiPicker?.focus();
+    }
+  });
+}
+
+/**
+ * Renders a chat message into the feed.
+ * @param {object} msg { sender_name, text, timestamp, sender_id }
+ */
+function renderChatMessage(msg) {
+  // Remove empty state
+  const $empty = $chatMessages.querySelector('.chat-empty');
+  if ($empty) $empty.remove();
+
+  const isMe = msg.sender_id === webrtcClient.clientId;
+  const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+  const div = document.createElement('div');
+  div.className = `chat-bubble ${isMe ? 'chat-bubble--self' : 'chat-bubble--remote'}`;
+
+  div.innerHTML = `
+    <div class="chat-bubble-meta">
+      <span class="chat-bubble-name">${escapeHtml(msg.sender_name || 'Guest')}</span>
+      <span class="chat-bubble-time">${time}</span>
+    </div>
+    <div class="chat-bubble-text">${escapeHtml(String(msg.text ?? ''))}</div>
+  `;
+
+  $chatMessages.appendChild(div);
+  $chatMessages.scrollTop = $chatMessages.scrollHeight;
+}
+
+/**
+ * Binds the "Copy Link" button.
+ * Generates a shareable URL with the ?room= param.
+ */
+function bindCopyLink() {
+  $btnCopyLink.addEventListener('click', async () => {
+    if (!currentRoomId) return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', currentRoomId);
+    const shareUrl = url.toString();
+
+    try {
+      let copied = false;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          copied = true;
+        } catch (_) {
+          // Fall back when clipboard permissions are unavailable.
+        }
+      }
+
+      if (!copied) {
+        const $copyField = document.createElement('textarea');
+        $copyField.value = shareUrl;
+        $copyField.setAttribute('readonly', '');
+        $copyField.style.position = 'fixed';
+        $copyField.style.opacity = '0';
+        document.body.appendChild($copyField);
+        $copyField.select();
+        copied = document.execCommand('copy');
+        $copyField.remove();
+        if (!copied) throw new Error('Clipboard copy command failed');
+      }
+
+      // Visual feedback
+      const originalText = $btnCopyLink.innerHTML;
+      $btnCopyLink.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Copied!
+      `;
+      $btnCopyLink.classList.add('btn--success');
+
+      setTimeout(() => {
+        $btnCopyLink.innerHTML = originalText;
+        $btnCopyLink.classList.remove('btn--success');
+      }, 2000);
+
+      showAlert('Meeting link copied to clipboard!', 'info');
+    } catch (err) {
+      console.error('[app] Copy failed:', err);
+      showAlert('Failed to copy link. Please copy the URL manually.', 'warn');
+    }
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENTRY POINT

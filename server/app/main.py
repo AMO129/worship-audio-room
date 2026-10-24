@@ -82,14 +82,16 @@ async def websocket_endpoint(
 
     Protocol:
       Client → Server:
-        { "type": "signal",  "signalType": "offer|answer|candidate",
-          "targetId": "<peer_id>", "sdp": "...", "candidate": {...} }
+                { "type": "offer|answer", "target_id": "<peer_id>", "sdp": "..." }
+                { "type": "ice-candidate", "target_id": "<peer_id>", "candidate": {...} }
+                { "type": "chat-message", "sender_name": "...", "text": "..." }
         { "type": "ping" }
 
       Server → Client:
-        { "type": "peer-joined", "peerId": "<id>", "peers": [...] }
-        { "type": "peer-left",   "peerId": "<id>" }
-        { "type": "signal",      "fromId": "<id>", "signalType": "...", ... }
+                { "type": "room-users", "peers": ["<id>", ...] }
+                { "type": "peer-joined|peer-left", "peer_id": "<id>" }
+                { "type": "offer|answer|ice-candidate", "sender_id": "<id>", ... }
+                { "type": "chat-message", "sender_id": "<id>", "timestamp": "...", ... }
         { "type": "pong" }
     """
     # Register peer and broadcast peer-joined to room members
@@ -106,14 +108,31 @@ async def websocket_endpoint(
                 await websocket.send_json({"type": "pong"})
                 continue
 
-            # ── Signal relay (offer / answer / ICE candidate) ──────────────────
+            # ── WebRTC signal relay (offer / answer / ice-candidate) ───────────
+            if msg_type in ("offer", "answer", "ice-candidate"):
+                await manager.relay_rtc(
+                    room_id=room_id,
+                    sender_id=client_id,
+                    msg_type=msg_type,
+                    payload=data,
+                )
+                continue
+
+            # ── Chat broadcast ────────────────────────────────────────────────
+            if msg_type == "chat-message":
+                await manager.broadcast_chat(
+                    room_id=room_id,
+                    sender_id=client_id,
+                    payload=data,
+                )
+                continue
+
+            # ── Legacy signal relay (signalType envelope) ─────────────────────
             if msg_type == "signal":
                 target_id = data.get("targetId")
                 if not target_id:
                     logger.debug("Signal missing targetId — dropped.")
                     continue
-
-                # Strip routing fields; inject fromId server-side in relay_signal()
                 signal_data = {
                     k: v for k, v in data.items()
                     if k not in ("type", "targetId")
