@@ -434,6 +434,32 @@ body {
   border-color: rgba(56,189,248,0.2);
 }
 
+.peer-card--muted { border-color: var(--amber); }
+.peer-card--muted .peer-mic-icon { color: var(--amber); }
+
+.peer-moderation-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.peer-moderation-btn {
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 0.7rem var(--font-ui);
+  cursor: pointer;
+}
+
+.peer-moderation-btn:hover { color: var(--text-primary); border-color: var(--blue); }
+.peer-moderation-btn--remove:hover { color: var(--crimson); border-color: var(--crimson); }
+
 .peer-card--empty {
   border-style: dashed;
   opacity: 0.4;
@@ -1556,6 +1582,8 @@ body {
   min-height: 400px;
 }
 
+.chat-sidebar[hidden] { display: none; }
+
 .chat-name-row {
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -1734,4 +1762,14 @@ body {
 .btn-ghost:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.stage-grid--chat-hidden { grid-template-columns: minmax(0, 1fr) 440px; }
+
+@media (max-width: 1200px) {
+  .stage-grid--chat-hidden { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .stage-grid--chat-hidden { grid-template-columns: minmax(0, 1fr); }
 }

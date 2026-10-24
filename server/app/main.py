@@ -127,6 +127,20 @@ async def websocket_endpoint(
                 )
                 continue
 
+            if msg_type == "mute-peer":
+                target_id = data.get("target_id")
+                if isinstance(target_id, str) and isinstance(data.get("muted"), bool):
+                    await manager.set_peer_muted(
+                        room_id, client_id, target_id, data["muted"]
+                    )
+                continue
+
+            if msg_type == "kick-peer":
+                target_id = data.get("target_id")
+                if isinstance(target_id, str):
+                    await manager.kick_peer(room_id, client_id, target_id)
+                continue
+
             # ── Legacy signal relay (signalType envelope) ─────────────────────
             if msg_type == "signal":
                 target_id = data.get("targetId")

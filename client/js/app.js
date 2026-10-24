@@ -14,7 +14,7 @@
  */
 
 import { AudioManager, EngineState } from './AudioManager.js?v=3';
-import { WebRTCManager }              from './WebRTCManager.js?v=5';
+import { WebRTCManager }              from './WebRTCManager.js?v=6';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -236,6 +236,12 @@ const $emojiPicker    = document.getElementById('emoji-picker');
 
 // -- Room sharing --
 const $btnCopyLink    = document.getElementById('btn-copy-link');
+const $btnToggleChat  = document.getElementById('btn-toggle-chat');
+const $chatToggleLabel = document.getElementById('chat-toggle-label');
+const $chatSidebar    = document.getElementById('chat-sidebar');
+const $stageGrid      = document.querySelector('.stage-grid');
+const $localPeerName  = document.getElementById('local-peer-name');
+const $localPeerRole  = document.getElementById('local-peer-role');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BOOTSTRAP
@@ -311,6 +317,12 @@ function bootstrap() {
   // Wire WebRTCClient callbacks
   webrtcClient.onPeerJoined   = addPeerCard;
   webrtcClient.onPeerLeft     = removePeerCard;
+  webrtcClient.onHostChange   = updateHostControls;
+  webrtcClient.onPeerMuted    = (peerId) => updatePeerModerationControls(peerId);
+  webrtcClient.onKicked       = () => {
+    showAlert('The host removed you from this room.', 'warn');
+    handleLeaveRoom();
+  };
   webrtcClient.onStatusChange = (status, msg) => {
     // 'connected' and 'live' both map to the 'live' badge style
     const badgeStatus = (status === 'connected' || status === 'live')
@@ -331,6 +343,7 @@ function bootstrap() {
   bindFactoryPresets();
   bindCustomPlaylist();
   bindRoomControls();
+  bindChatVisibility();
   bindCopyLink();
   bindChat();
   bindPlayPause();
@@ -1054,6 +1067,17 @@ function bindRoomControls() {
   });
 }
 
+function bindChatVisibility() {
+  $btnToggleChat?.addEventListener('click', () => {
+    const hidden = !$chatSidebar.hidden;
+    $chatSidebar.hidden = hidden;
+    $stageGrid.classList.toggle('stage-grid--chat-hidden', hidden);
+    $btnToggleChat.setAttribute('aria-pressed', String(hidden));
+    $btnToggleChat.setAttribute('aria-label', hidden ? 'Show chat' : 'Hide chat');
+    $chatToggleLabel.textContent = hidden ? 'Show Chat' : 'Hide Chat';
+  });
+}
+
 /**
  * Handles the "Join Room" action.
  * Validates the Room ID, opens the WebSocket signaling channel,
@@ -1085,6 +1109,7 @@ async function handleJoinRoom() {
     await webrtcClient.join(roomId, audioManager, userName);
 
     currentRoomId = roomId;
+    updateHostControls();
 
     // Push room to URL for deep linking / sharing
     const roomUrl = new URL(window.location.href);
@@ -1152,6 +1177,7 @@ function handleLeaveRoom() {
   $btnLeave.disabled = true;
   $roomIdInput.disabled = false;
   updatePeerCountBadge();
+  updateHostControls();
 
   console.log('[app] Left room.');
 }
@@ -1210,6 +1236,7 @@ function addPeerCard(peerId, stream) {
 
   $peerGrid.appendChild(li);
   peerElements.set(peerId, li);
+  renderPeerModerationControls(li, peerId);
   updatePeerCountBadge();
 
   console.log(`[app] Peer card added: ${peerId}`);
@@ -1244,6 +1271,67 @@ function updatePeerCountBadge() {
   const total = count + 1; // +1 for self
   $peerCountBadge.textContent   = `${count} connected`;
   $participantCount.textContent = String(total);
+}
+
+function updateHostControls() {
+  const isInRoom = Boolean(currentRoomId && webrtcClient.isConnected);
+  const isHost = isInRoom && webrtcClient.isHost;
+  if ($localPeerName) $localPeerName.textContent = isHost ? 'You (Host)' : 'You';
+  if ($localPeerRole) {
+    $localPeerRole.textContent = isInRoom ? (isHost ? 'Host' : 'Participant') : 'Not in a room';
+  }
+
+  for (const [peerId, card] of peerElements) {
+    renderPeerModerationControls(card, peerId);
+  }
+}
+
+function updatePeerModerationControls(peerId) {
+  const card = peerElements.get(peerId);
+  if (card) renderPeerModerationControls(card, peerId);
+}
+
+function renderPeerModerationControls(card, peerId) {
+  let controls = card.querySelector('.peer-moderation-controls');
+  if (!webrtcClient.isHost) {
+    controls?.remove();
+    return;
+  }
+
+  if (!controls) {
+    controls = document.createElement('div');
+    controls.className = 'peer-moderation-controls';
+    const muteButton = document.createElement('button');
+    muteButton.type = 'button';
+    muteButton.className = 'peer-moderation-btn';
+    muteButton.dataset.action = 'mute';
+    muteButton.addEventListener('click', () => {
+      webrtcClient.setPeerMuted(peerId, !webrtcClient.isPeerMuted(peerId));
+    });
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'peer-moderation-btn peer-moderation-btn--remove';
+    removeButton.textContent = 'Remove';
+    removeButton.setAttribute('aria-label', `Remove participant ${peerId.slice(0, 8)}`);
+    removeButton.addEventListener('click', () => {
+      if (window.confirm(`Remove participant ${peerId.slice(0, 8)} from this room?`)) {
+        webrtcClient.removePeer(peerId);
+      }
+    });
+
+    controls.append(muteButton, removeButton);
+    card.appendChild(controls);
+  }
+
+  const muted = webrtcClient.isPeerMuted(peerId);
+  const role = card.querySelector('.peer-role');
+  const muteButton = controls.querySelector('[data-action="mute"]');
+  card.classList.toggle('peer-card--muted', muted);
+  if (role) role.textContent = muted ? 'Attendee · Muted' : 'Attendee';
+  muteButton.textContent = muted ? 'Unmute' : 'Mute';
+  muteButton.setAttribute('aria-pressed', String(muted));
+  muteButton.setAttribute('aria-label', `${muted ? 'Unmute' : 'Mute'} participant ${peerId.slice(0, 8)}`);
 }
 
 /**

@@ -75,6 +75,12 @@
           </svg>
           Copy Link
         </button>
+        <button id="btn-toggle-chat" class="btn btn-ghost" type="button" aria-label="Hide chat" aria-pressed="false" aria-controls="chat-sidebar">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 2h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5l-3 2V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+          <span id="chat-toggle-label">Hide Chat</span>
+        </button>
 
         <!-- Connection Status Badge -->
         <div id="connection-status" class="status-badge status-disconnected" role="status" aria-live="polite">
@@ -120,8 +126,8 @@
               </svg>
             </div>
             <div class="peer-info">
-              <span class="peer-name">You (Host)</span>
-              <span class="peer-role">Preacher</span>
+              <span id="local-peer-name" class="peer-name">You</span>
+              <span id="local-peer-role" class="peer-role">Not in a room</span>
             </div>
             <div class="peer-indicators" aria-hidden="true">
               <div id="local-speaking-indicator" class="speaking-ring speaking-ring--inactive"></div>
@@ -699,7 +705,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=3"></script>
+  <script type="module" src="js/app.js?v=4"></script>
 
 </body>
 </html>

@@ -24,12 +24,17 @@ export class WebRTCManager {
     this._pingInterval  = null;
     this._audioContainer = null;
     this._userName      = 'Host';
+    this._hostId        = null;
+    this._mutedPeers    = new Set();
 
     // Public callbacks — set by the caller before joining
     this.onPeerJoined   = null;   // (peerId, stream) => void
     this.onPeerLeft     = null;   // (peerId) => void
     this.onStatusChange = null;   // (status, message) => void
     this.onChatMessage  = null;   // (msg) => void
+    this.onHostChange   = null;   // (hostId) => void
+    this.onPeerMuted    = null;   // (peerId, muted) => void
+    this.onKicked        = null;   // () => void
   }
 
   // ─────────────────────────────────────────────
@@ -92,6 +97,7 @@ export class WebRTCManager {
     }
     this.peers.clear();
     this._pendingCandidates.clear();
+    this._mutedPeers.clear();
 
     if (this._ws) {
       try { this._ws.close(1000, 'User left'); } catch (_) { /* ignore */ }
@@ -108,6 +114,8 @@ export class WebRTCManager {
     this._audioManager  = null;
     this._pingInterval  = null;
     this._userName      = 'Host';
+    this._hostId        = null;
+    this.onHostChange?.(null);
   }
 
   /**
@@ -116,6 +124,18 @@ export class WebRTCManager {
    */
   sendChat(text) {
     this._send({ type: 'chat-message', sender_name: this._userName, text });
+  }
+
+  setPeerMuted(peerId, muted) {
+    if (this.isHost) this._send({ type: 'mute-peer', target_id: peerId, muted });
+  }
+
+  removePeer(peerId) {
+    if (this.isHost) this._send({ type: 'kick-peer', target_id: peerId });
+  }
+
+  isPeerMuted(peerId) {
+    return this._mutedPeers.has(peerId);
   }
 
   /**
@@ -139,6 +159,8 @@ export class WebRTCManager {
   get clientId()      { return this._clientId; }
   get peerCount()     { return this.peers.size; }
   get isConnected()   { return this._ws?.readyState === WebSocket.OPEN; }
+  get isHost()        { return this._hostId !== null && this._clientId === this._hostId; }
+  get hostId()        { return this._hostId; }
   get remotePeerIds() { return [...this.peers.keys()]; }
 
   // ─────────────────────────────────────────────
@@ -151,6 +173,8 @@ export class WebRTCManager {
       case 'room-users':    this._onRoomUsers(msg);        break;
       case 'peer-joined':   this._onPeerJoined(msg);       break;
       case 'peer-left':     this._onPeerLeft(msg);         break;
+      case 'participant-mute': this._onParticipantMute(msg); break;
+      case 'peer-kicked':   this.onKicked?.();             break;
       case 'offer':         this._handleOffer(msg);        break;
       case 'answer':        this._handleAnswer(msg);       break;
       case 'ice-candidate': this._handleCandidate(msg);    break;
@@ -170,6 +194,13 @@ export class WebRTCManager {
    * @param {{ peers: string[] }} msg
    */
   _onRoomUsers(msg) {
+    this._hostId = msg.host_id ?? null;
+    this._mutedPeers = new Set(msg.muted_peers ?? []);
+    this.onHostChange?.(this._hostId);
+    for (const peerId of this._mutedPeers) {
+      this._applyRemoteMute(peerId);
+      this.onPeerMuted?.(peerId, true);
+    }
     for (const peerId of msg.peers ?? []) {
       this._preparePeer(peerId);
     }
@@ -209,7 +240,25 @@ export class WebRTCManager {
       ?.querySelector(`[data-peer-id="${msg.peer_id}"]`)
       ?.remove();
 
+    this._mutedPeers.delete(msg.peer_id);
+    if (msg.host_id !== undefined && msg.host_id !== this._hostId) {
+      this._hostId = msg.host_id;
+      this.onHostChange?.(this._hostId);
+    }
+
     this.onPeerLeft?.(msg.peer_id);
+  }
+
+  _onParticipantMute(msg) {
+    if (msg.muted) this._mutedPeers.add(msg.peer_id);
+    else this._mutedPeers.delete(msg.peer_id);
+    this._applyRemoteMute(msg.peer_id);
+    this.onPeerMuted?.(msg.peer_id, msg.muted);
+  }
+
+  _applyRemoteMute(peerId) {
+    const audio = this._audioContainer?.querySelector(`[data-peer-id="${peerId}"]`);
+    if (audio) audio.muted = this._mutedPeers.has(peerId);
   }
 
   // ─────────────────────────────────────────────
@@ -365,6 +414,7 @@ export class WebRTCManager {
       el.style.display = 'none';
       this._audioContainer.appendChild(el);
     }
+    el.muted = this._mutedPeers.has(peerId);
     el.srcObject = stream;
     el.play().catch((err) => {
       console.warn(`[WebRTCManager] Autoplay blocked for peer ${peerId}:`, err.message);
