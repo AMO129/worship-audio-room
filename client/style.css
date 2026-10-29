@@ -1972,6 +1972,20 @@ body {
   justify-content: center;
 }
 
+.auth-oauth-link {
+  min-width: 220px;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.auth-config-status {
+  max-width: 280px;
+  margin: 0;
+  color: var(--amber);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
 .auth-dev-btn {
   margin-top: var(--sp-2);
   border-color: var(--amber);

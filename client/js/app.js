@@ -275,6 +275,8 @@ let captionsActive = false;
 // -- Auth Overlay --
 const $authOverlay      = document.getElementById('auth-overlay');
 const $googleSigninBtn  = document.getElementById('google-signin-btn');
+const $authOauthLink    = document.getElementById('auth-oauth-link');
+const $authConfigStatus  = document.getElementById('auth-config-status');
 const $devLoginBtn      = document.getElementById('dev-login-btn');
 const $userProfileBadge = document.getElementById('user-profile-badge');
 const $userAvatar       = document.getElementById('user-avatar');
@@ -469,6 +471,9 @@ async function initGoogleSignIn() {
       if (typeof config.google_client_id === 'string' && config.google_client_id) {
         googleClientId = config.google_client_id;
       }
+      if (config.google_oauth_enabled && $authOauthLink) {
+        $authOauthLink.hidden = false;
+      }
     }
   } catch (err) {
     console.warn('[app] Could not load authentication configuration:', err);
@@ -501,6 +506,9 @@ async function initGoogleSignIn() {
     }
     // Hide the GIS button container since it won't render anything
     if ($googleSigninBtn) $googleSigninBtn.style.display = 'none';
+  } else if ($authConfigStatus) {
+    $authConfigStatus.hidden = false;
+    $authConfigStatus.textContent = 'Google sign-in is not configured on this deployment.';
   }
 }
 

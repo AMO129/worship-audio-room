@@ -112,6 +112,9 @@ async def current_user(request: Request) -> JSONResponse:
 async def auth_config() -> JSONResponse:
     return JSONResponse({
         "google_client_id": settings.google_client_id,
+        "google_oauth_enabled": bool(
+            settings.google_client_id and settings.google_client_secret
+        ),
     })
 
 
