@@ -1573,16 +1573,18 @@ body {
   .header-inner {
     padding: 0 var(--sp-4);
     gap: var(--sp-3);
+    align-items: stretch;
   }
 
   .brand-tagline { display: none; }
 
   .room-controls {
     gap: var(--sp-2);
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
-  .room-id-input { width: 140px; font-size: 0.75rem; }
+  .room-id-input { width: min(220px, 100%); font-size: 0.75rem; }
 
   .btn { padding: 0 var(--sp-3); font-size: 0.75rem; }
 
@@ -1590,23 +1592,69 @@ body {
 
   .deck-card { padding: var(--sp-4); }
 
+  .section-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+
+  .stage-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .metric-group .metric-item:nth-child(n+4),
   .metric-group .metric-separator:nth-child(n+6) { display: none; }
 }
 
 /* ── Small Mobile (≤ 480px) ─────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  :root { --header-h: 110px; }
+  .app-header { height: auto; }
 
   .header-inner {
-    flex-wrap: wrap;
+    flex-direction: column;
     height: auto;
     padding: var(--sp-3) var(--sp-4);
     gap: var(--sp-3);
   }
 
-  .room-controls { flex-wrap: wrap; }
-  .room-id-input { width: 100%; }
+  .room-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .room-input-group,
+  .room-input-group .input-wrapper,
+  .room-input-group .room-id-input {
+    width: 100%;
+  }
+
+  .room-input-group,
+  #btn-toggle-chat,
+  #btn-sign-in,
+  #user-profile-badge,
+  #connection-status {
+    grid-column: 1 / -1;
+  }
+
+  #user-profile-badge {
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .account-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stage-header-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
 
   .stage-grid { gap: var(--sp-3); }
 
