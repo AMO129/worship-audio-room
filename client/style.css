@@ -1686,6 +1686,31 @@ body {
   .peer-card { min-height: 120px; }
 
   .track-name { max-width: 110px; }
+
+  .footer-inner {
+    padding: 0 var(--sp-3);
+    gap: var(--sp-2);
+  }
+
+  .metric-group {
+    min-width: 0;
+    overflow: hidden;
+    gap: var(--sp-2);
+  }
+
+  .metric-item {
+    min-width: 0;
+  }
+
+  .metric-label,
+  .metric-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .footer-brand {
+    display: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
