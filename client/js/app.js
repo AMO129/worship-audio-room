@@ -329,102 +329,6 @@ function bindPlayPause() {
       showAlert('Select a track to start playback.', 'info');
       return;
     }
-
-    function bindCollaborationTools() {
-      $btnRaiseHand?.addEventListener('click', () => {
-        handRaised = !handRaised;
-        webrtcClient.setHandRaised(handRaised);
-        $btnRaiseHand.textContent = handRaised ? 'Lower Hand' : 'Raise Hand';
-        $btnRaiseHand.setAttribute('aria-pressed', String(handRaised));
-      });
-      $btnReaction?.addEventListener('click', () => webrtcClient.sendReaction('❤️'));
-      $btnMuteEveryone?.addEventListener('click', () => {
-        webrtcClient.muteEveryone();
-        showAlert('Everyone has been muted.', 'info');
-      });
-      $btnRecord?.addEventListener('click', toggleLocalRecording);
-      $btnCalendar?.addEventListener('click', downloadCalendarInvite);
-    }
-
-    function handleRoomNotification(message) {
-      const text = message?.body || message?.message || 'Room update';
-      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification('Worship Room', { body: text });
-      }
-      showAlert(text, 'info');
-    }
-
-    function toggleLocalRecording() {
-      if (recorder?.state === 'recording') {
-        recorder.stop();
-        return;
-      }
-      const audioStream = audioManager.destinationNode?.stream;
-      if (!audioStream || typeof MediaRecorder === 'undefined') {
-        showAlert('Local recording is not supported in this browser yet.', 'warn');
-        return;
-      }
-      const stream = new MediaStream(audioStream.getTracks());
-      if ($localCameraVideo?.srcObject) {
-        $localCameraVideo.srcObject.getVideoTracks().forEach(track => stream.addTrack(track));
-      }
-      recordingChunks = [];
-      try {
-        recorder = new MediaRecorder(stream);
-      } catch (error) {
-        console.error('[app] Could not start local recording:', error);
-        showAlert('Could not start local recording.', 'error');
-        return;
-      }
-      recorder.ondataavailable = event => {
-        if (event.data.size) recordingChunks.push(event.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(recordingChunks, { type: recorder.mimeType || 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `worship-room-${new Date().toISOString().replaceAll(':', '-')}.webm`;
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        recordingChunks = [];
-        $btnRecord.textContent = 'Record locally';
-        $btnRecord.setAttribute('aria-pressed', 'false');
-      };
-      recorder.start();
-      $btnRecord.textContent = 'Stop recording';
-      $btnRecord.setAttribute('aria-pressed', 'true');
-    }
-
-    function downloadCalendarInvite() {
-      if (!currentRoomId) return;
-      const start = new Date();
-      const end = new Date(start.getTime() + 60 * 60 * 1000);
-      const format = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-      const roomUrl = getCleanRoomUrl(currentRoomId);
-      const ics = [
-        'BEGIN:VCALENDAR',
-        'VERSION:2.0',
-        'PRODID:-//Worship Room//EN',
-        'BEGIN:VEVENT',
-        `UID:${currentRoomId}@worship-room`,
-        `DTSTAMP:${format(new Date())}`,
-        `DTSTART:${format(start)}`,
-        `DTEND:${format(end)}`,
-        'SUMMARY:Worship Room gathering',
-        `DESCRIPTION:Join Worship Room: ${roomUrl}`,
-        `URL:${roomUrl}`,
-        'END:VEVENT',
-        'END:VCALENDAR',
-      ].join('\r\n');
-      const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `worship-room-${currentRoomId}.ics`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
-
     if (audioManager._isMusicPlaying) {
       audioManager.pauseMusic();
       updatePlayPauseUI();
@@ -435,6 +339,93 @@ function bindPlayPause() {
       });
     }
   });
+}
+
+function bindCollaborationTools() {
+  $btnRaiseHand?.addEventListener('click', () => {
+    handRaised = !handRaised;
+    webrtcClient.setHandRaised(handRaised);
+    $btnRaiseHand.textContent = handRaised ? 'Lower Hand' : 'Raise Hand';
+    $btnRaiseHand.setAttribute('aria-pressed', String(handRaised));
+  });
+  $btnReaction?.addEventListener('click', () => webrtcClient.sendReaction('❤️'));
+  $btnMuteEveryone?.addEventListener('click', () => {
+    webrtcClient.muteEveryone();
+    showAlert('Everyone has been muted.', 'info');
+  });
+  $btnRecord?.addEventListener('click', toggleLocalRecording);
+  $btnCalendar?.addEventListener('click', downloadCalendarInvite);
+}
+
+function handleRoomNotification(message) {
+  const text = message?.body || message?.message || 'Room update';
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    new Notification('Worship Room', { body: text });
+  }
+  showAlert(text, 'info');
+}
+
+function toggleLocalRecording() {
+  if (recorder?.state === 'recording') {
+    recorder.stop();
+    return;
+  }
+  const audioStream = audioManager.destinationNode?.stream;
+  if (!audioStream || typeof MediaRecorder === 'undefined') {
+    showAlert('Local recording is not supported in this browser yet.', 'warn');
+    return;
+  }
+  const stream = new MediaStream(audioStream.getTracks());
+  if ($localCameraVideo?.srcObject) {
+    $localCameraVideo.srcObject.getVideoTracks().forEach(track => stream.addTrack(track));
+  }
+  recordingChunks = [];
+  try {
+    recorder = new MediaRecorder(stream);
+  } catch (error) {
+    console.error('[app] Could not start local recording:', error);
+    showAlert('Could not start local recording.', 'error');
+    return;
+  }
+  recorder.ondataavailable = event => {
+    if (event.data.size) recordingChunks.push(event.data);
+  };
+  recorder.onstop = () => {
+    const blob = new Blob(recordingChunks, { type: recorder.mimeType || 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `worship-room-${new Date().toISOString().replaceAll(':', '-')}.webm`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    recordingChunks = [];
+    $btnRecord.textContent = 'Record locally';
+    $btnRecord.setAttribute('aria-pressed', 'false');
+  };
+  recorder.start();
+  $btnRecord.textContent = 'Stop recording';
+  $btnRecord.setAttribute('aria-pressed', 'true');
+}
+
+function downloadCalendarInvite() {
+  if (!currentRoomId) return;
+  const start = new Date();
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const format = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  const roomUrl = getCleanRoomUrl(currentRoomId);
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Worship Room//EN',
+    'BEGIN:VEVENT', `UID:${currentRoomId}@worship-room`,
+    `DTSTAMP:${format(new Date())}`, `DTSTART:${format(start)}`, `DTEND:${format(end)}`,
+    'SUMMARY:Worship Room gathering', `DESCRIPTION:Join Worship Room: ${roomUrl}`,
+    `URL:${roomUrl}`, 'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `worship-room-${currentRoomId}.ics`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
