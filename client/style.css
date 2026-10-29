@@ -669,22 +669,44 @@ body {
    AUDIO DECK (Right Column)
    ══════════════════════════════════════════════════════════════════════════ */
 .audio-deck {
+  position: fixed;
+  top: calc(var(--header-h) + var(--sp-4));
+  right: var(--sp-5);
+  bottom: calc(var(--footer-h) + var(--sp-4));
+  z-index: 120;
+  width: min(440px, calc(100vw - 2 * var(--sp-5)));
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 2px; /* prevent scrollbar overlap */
+  padding: var(--sp-5);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  transform: translateX(calc(100% + var(--sp-6)));
+  opacity: 0;
+  visibility: hidden;
+  transition: transform var(--t-med), opacity var(--t-med), visibility var(--t-med);
 }
 
-.audio-deck--collapsed > :not(.section-header) {
+.audio-deck--open {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: var(--header-h) 0 var(--footer-h);
+  z-index: 110;
+  background: rgba(3, 7, 18, 0.52);
+  backdrop-filter: blur(2px);
+}
+
+.drawer-backdrop[hidden] {
   display: none;
-}
-
-.audio-console-toggle {
-  margin-left: auto;
-  padding: 4px 9px;
-  font-size: 0.7rem;
 }
 
 .reaction-menu {
@@ -1889,13 +1911,13 @@ body {
    ═══════════════════════════════════════════════════════════ */
 
 .stage-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 340px;
 }
 
 .stage-grid > * { min-width: 0; }
 
 @media (max-width: 1200px) {
-  .stage-grid { grid-template-columns: 1fr 1fr; }
+  .stage-grid { grid-template-columns: minmax(0, 1fr) 320px; }
   .chat-sidebar { grid-column: 1 / -1; }
 }
 
@@ -1914,6 +1936,16 @@ body {
   overflow: hidden;
   height: 100%;
   min-height: 400px;
+}
+
+@media (max-width: 768px) {
+  .audio-deck {
+    top: calc(var(--header-h) + var(--sp-2));
+    right: var(--sp-2);
+    bottom: calc(var(--footer-h) + var(--sp-2));
+    width: calc(100vw - 2 * var(--sp-2));
+    padding: var(--sp-4);
+  }
 }
 
 .chat-sidebar[hidden] { display: none; }

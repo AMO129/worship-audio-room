@@ -52,8 +52,22 @@ class Persistence:
                     sender_user_id TEXT NOT NULL,
                     sender_name TEXT NOT NULL,
                     text TEXT NOT NULL,
+                    reply_sender_name TEXT,
+                    reply_text TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
+                """
+            )
+            await connection.execute(
+                """
+                ALTER TABLE worship_chat_messages
+                ADD COLUMN IF NOT EXISTS reply_sender_name TEXT
+                """
+            )
+            await connection.execute(
+                """
+                ALTER TABLE worship_chat_messages
+                ADD COLUMN IF NOT EXISTS reply_text TEXT
                 """
             )
             await connection.execute(
@@ -112,6 +126,7 @@ class Persistence:
         sender_name: str,
         text: str,
         created_at: datetime,
+        reply_to: dict | None = None,
     ) -> None:
         pool = await self._get_pool()
         if pool is None:
@@ -120,10 +135,19 @@ class Persistence:
             await connection.execute(
                 """
                 INSERT INTO worship_chat_messages
-                    (room_id, sender_user_id, sender_name, text, created_at)
-                VALUES (%s, %s, %s, %s, %s)
+                    (room_id, sender_user_id, sender_name, text,
+                     reply_sender_name, reply_text, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (room_id, sender_user_id, sender_name, text, created_at),
+                (
+                    room_id,
+                    sender_user_id,
+                    sender_name,
+                    text,
+                    (reply_to or {}).get("sender_name"),
+                    (reply_to or {}).get("text"),
+                    created_at,
+                ),
             )
             await connection.commit()
 
@@ -134,7 +158,8 @@ class Persistence:
         async with pool.connection() as connection:
             cursor = await connection.execute(
                 """
-                SELECT sender_user_id, sender_name, text, created_at
+                SELECT sender_user_id, sender_name, text,
+                       reply_sender_name, reply_text, created_at
                 FROM worship_chat_messages
                 WHERE room_id = %s
                 ORDER BY created_at DESC
@@ -148,7 +173,11 @@ class Persistence:
                 "sender_id": row[0],
                 "sender_name": row[1],
                 "text": row[2],
-                "timestamp": row[3].isoformat(),
+                "timestamp": row[5].isoformat(),
+                **(
+                    {"reply_to": {"sender_name": row[3], "text": row[4]}}
+                    if row[3] and row[4] else {}
+                ),
             }
             for row in reversed(rows)
         ]

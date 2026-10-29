@@ -93,6 +93,9 @@
           Join Room
         </button>
         <button id="btn-schedule-call" class="btn btn-ghost" type="button">Schedule</button>
+        <button id="btn-toggle-audio-console" class="btn btn-ghost" type="button" aria-expanded="false" aria-controls="audio-deck">
+          Audio Console
+        </button>
         <button id="btn-leave" class="btn btn-danger" disabled aria-label="Leave meeting room">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M2 8h10M9 5l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -115,9 +118,9 @@
             <a id="share-whatsapp" role="menuitem" target="_blank" rel="noopener noreferrer">WhatsApp</a>
             <a id="share-email" role="menuitem">Email</a>
             <button id="btn-copy-link" type="button" role="menuitem">Copy link</button>
-            <label class="share-invite-label" for="share-email-address">Invite by email</label>
+            <label class="share-invite-label" for="share-email-address">Add by Email</label>
             <input id="share-email-address" class="share-email-input" type="email" placeholder="person@example.com" autocomplete="email" />
-            <button id="btn-invite-email" type="button" role="menuitem">Open email invitation</button>
+            <button id="btn-invite-email" type="button" role="menuitem">Send email invitation</button>
           </div>
         </div>
         <button id="btn-toggle-chat" class="btn btn-ghost" type="button" aria-label="Hide chat" aria-pressed="false" aria-controls="chat-sidebar">
@@ -313,7 +316,6 @@
             Audio Console
           </h2>
           <span class="deck-label">P&amp;W Engine v1.0</span>
-          <button id="btn-toggle-audio-console" class="btn btn-ghost audio-console-toggle" type="button" aria-expanded="true">Hide</button>
         </div>
 
         <!-- ═══ CARD 1: Preacher Voice Channel ═══ -->
@@ -770,6 +772,7 @@
     </div><!-- /stage-grid -->
   </main>
 
+  <div id="audio-console-backdrop" class="drawer-backdrop" hidden></div>
   <div id="schedule-modal" class="modal-backdrop" hidden>
     <section class="schedule-modal" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
       <button id="btn-close-schedule" class="modal-close" type="button" aria-label="Close">×</button>

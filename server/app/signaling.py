@@ -55,6 +55,7 @@ class ConnectionManager:
         self.polls: Dict[str, Dict[str, dict]] = {}
         self.questions: Dict[str, Dict[str, dict]] = {}
         self.question_votes: Dict[str, Dict[str, set[str]]] = {}
+        self.chat_history: Dict[str, list[dict]] = {}
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -656,7 +657,13 @@ class ConnectionManager:
                 }
         for ws in list(room.values()):
             await self._send(ws, enriched)
+        history = self.chat_history.setdefault(room_id, [])
+        history.append(dict(enriched))
+        del history[:-100]
         return enriched
+
+    def recent_chat(self, room_id: str, limit: int = 100) -> list[dict]:
+        return list(self.chat_history.get(room_id, [])[-min(max(limit, 1), 200):])
 
     async def broadcast_screen_share_stopped(self, room_id: str, sender_id: str) -> None:
         room = self.rooms.get(room_id, {})

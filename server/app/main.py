@@ -320,6 +320,8 @@ async def websocket_endpoint(
     if client_id in manager.rooms.get(room_id, {}):
         await persistence.ensure_room(room_id, str(user["sub"]))
         history = await persistence.recent_chat(room_id)
+        if not history:
+            history = manager.recent_chat(room_id)
         if history:
             await websocket.send_json({"type": "chat-history", "messages": history})
     logger.info("WS open  — room='%s' client='%s'", room_id, client_id)
@@ -367,6 +369,7 @@ async def websocket_endpoint(
                         enriched["sender_name"],
                         enriched["text"],
                         datetime.fromisoformat(enriched["timestamp"]),
+                        enriched.get("reply_to"),
                     )
                 continue
 
@@ -470,7 +473,19 @@ async def websocket_endpoint(
                 target_id = data.get("target_id")
                 admit = data.get("admit")
                 if isinstance(target_id, str) and isinstance(admit, bool):
-                    await manager.decide_admission(room_id, client_id, target_id, admit)
+                    admitted = await manager.decide_admission(
+                        room_id, client_id, target_id, admit
+                    )
+                    if admitted and admit:
+                        history = await persistence.recent_chat(room_id)
+                        if not history:
+                            history = manager.recent_chat(room_id)
+                        target_socket = manager.rooms.get(room_id, {}).get(target_id)
+                        if history and target_socket:
+                            await target_socket.send_json({
+                                "type": "chat-history",
+                                "messages": history,
+                            })
                 continue
 
             # ── Legacy signal relay (signalType envelope) ─────────────────────

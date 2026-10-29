@@ -285,6 +285,7 @@ const $moreControlsMenu = document.getElementById('more-controls-menu');
 const $reactionMenu = document.getElementById('reaction-menu');
 const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
 const $audioDeck = document.getElementById('audio-deck');
+const $audioConsoleBackdrop = document.getElementById('audio-console-backdrop');
 const $scheduleModal = document.getElementById('schedule-modal');
 const $btnCloseSchedule = document.getElementById('btn-close-schedule');
 const $scheduleRoom = document.getElementById('schedule-room');
@@ -329,6 +330,14 @@ function applyDeepLink() {
     $roomIdInput.value = roomParam;
     pendingRoomId = roomParam;
     return true;
+  }
+
+  function resetChatFeed() {
+    $chatMessages.innerHTML = `
+      <div class="chat-empty">
+        <span>No messages yet.<br/>Join a room to chat.</span>
+      </div>
+    `;
   }
   return false;
 }
@@ -386,9 +395,17 @@ function bindCollaborationTools() {
     $btnMoreControls.setAttribute('aria-expanded', String(!$moreControlsMenu.hidden));
   });
   $btnToggleAudioConsole?.addEventListener('click', () => {
-    const hidden = !$audioDeck.classList.toggle('audio-deck--collapsed');
-    $btnToggleAudioConsole.textContent = hidden ? 'Show' : 'Hide';
-    $btnToggleAudioConsole.setAttribute('aria-expanded', String(!hidden));
+    const open = !$audioDeck.classList.contains('audio-deck--open');
+    $audioDeck.classList.toggle('audio-deck--open', open);
+    $audioConsoleBackdrop.hidden = !open;
+    $btnToggleAudioConsole.setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('drawer-open', open);
+  });
+  $audioConsoleBackdrop?.addEventListener('click', () => $btnToggleAudioConsole.click());
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && $audioDeck.classList.contains('audio-deck--open')) {
+      $btnToggleAudioConsole.click();
+    }
   });
 }
 
@@ -1893,6 +1910,7 @@ async function handleJoinRoom() {
   setConnectionStatus('disconnected', 'Connecting…');
 
   try {
+    resetChatFeed();
     // Pass the live AudioManager stream (if available) so WebRTCManager can
     // attach it immediately to any peer connections it creates.
     const userName = ($chatUsername?.value || authenticatedUser.name || authenticatedUser.email || 'Participant').trim();

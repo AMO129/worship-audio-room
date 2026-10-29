@@ -563,7 +563,9 @@ export class WebRTCManager {
   async _initiateOffer(remotePeerId, peerConnection = this.peers.get(remotePeerId)) {
     try {
       const pc    = peerConnection ?? this._createPeerConnection(remotePeerId);
-      let audioTransceiver = pc.getTransceivers().find((item) => item.receiver.track.kind === 'audio');
+      let audioTransceiver = pc.getTransceivers().find(
+        (item) => item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio',
+      );
       if (!audioTransceiver) {
         audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
       }
@@ -593,7 +595,9 @@ export class WebRTCManager {
       await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
       await this._applyPendingCandidates(msg.sender_id, pc);
 
-      const audioTransceiver = pc.getTransceivers().find((item) => item.receiver.track.kind === 'audio');
+      const audioTransceiver = pc.getTransceivers().find(
+        (item) => item.receiver.track?.kind === 'audio' || item.sender.track?.kind === 'audio',
+      );
       if (audioTransceiver) {
         audioTransceiver.direction = 'sendrecv';
         const track = this._getLocalTrack();
@@ -732,7 +736,11 @@ export class WebRTCManager {
       el.setAttribute('data-peer-id', peerId);
       el.autoplay   = true;
       el.playsInline = true;
-      el.style.display = 'none';
+      el.style.position = 'absolute';
+      el.style.width = '1px';
+      el.style.height = '1px';
+      el.style.opacity = '0.01';
+      el.style.pointerEvents = 'none';
       this._audioContainer.appendChild(el);
     }
     el.muted = this._mutedPeers.has(peerId);
