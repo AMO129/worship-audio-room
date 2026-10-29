@@ -265,6 +265,8 @@ const $admissionPanel = document.getElementById('admission-panel');
 const $admissionList  = document.getElementById('admission-list');
 const $btnShareScreen = document.getElementById('btn-share-screen');
 const $btnStopScreenShare = document.getElementById('btn-stop-screen-share');
+const $btnToggleCamera = document.getElementById('btn-toggle-camera');
+const $localCameraVideo = document.getElementById('local-camera-video');
 const $btnToggleCaptions = document.getElementById('btn-toggle-captions');
 const $screenShareGrid = document.getElementById('screen-share-grid');
 const $captionsPanel = document.getElementById('captions-panel');
@@ -357,6 +359,7 @@ async function bootstrap() {
 
   // Wire WebRTCClient callbacks
   webrtcClient.onPeerJoined   = addPeerCard;
+  webrtcClient.onRemoteStream = updatePeerMedia;
   webrtcClient.onPeerRenamed  = updatePeerDisplayName;
   webrtcClient.onCaption = renderCaption;
   webrtcClient.onPeerLeft     = removePeerCard;
@@ -373,6 +376,18 @@ async function bootstrap() {
     removeScreenShareTile(webrtcClient.clientId);
     $btnShareScreen.hidden = false;
     $btnStopScreenShare.hidden = true;
+  };
+  webrtcClient.onCameraStarted = (stream) => {
+    $localCameraVideo.srcObject = stream;
+    $localCameraVideo.hidden = false;
+    $btnToggleCamera.textContent = 'Disable Camera';
+    $btnToggleCamera.setAttribute('aria-pressed', 'true');
+  };
+  webrtcClient.onCameraStopped = () => {
+    $localCameraVideo.srcObject = null;
+    $localCameraVideo.hidden = true;
+    $btnToggleCamera.textContent = 'Enable Camera';
+    $btnToggleCamera.setAttribute('aria-pressed', 'false');
   };
   webrtcClient.onRemoteScreenShare = (peerId, stream) => {
     renderScreenShareTile(peerId, stream, webrtcClient.getPeerName(peerId), false);
@@ -414,6 +429,7 @@ async function bootstrap() {
   bindCustomPlaylist();
   bindRoomControls();
   bindScreenShare();
+  bindCamera();
   bindCaptions();
   bindChatVisibility();
   bindCopyLink();
@@ -1498,9 +1514,30 @@ function bindScreenShare() {
 
     } finally {
       $btnShareScreen.disabled = false;
+      $btnToggleCamera.disabled = false;
     }
   });
   $btnStopScreenShare?.addEventListener('click', () => webrtcClient.stopScreenShare());
+}
+
+function bindCamera() {
+  $btnToggleCamera?.addEventListener('click', async () => {
+    $btnToggleCamera.disabled = true;
+    try {
+      if (webrtcClient.cameraActive) {
+        webrtcClient.stopCamera();
+      } else {
+        await webrtcClient.startCamera();
+      }
+    } catch (error) {
+      console.warn('[app] Camera could not start:', error);
+      if (error.name !== 'NotAllowedError') {
+        showAlert('Could not start the camera. Check camera permission and try again.', 'warn');
+      }
+    } finally {
+      $btnToggleCamera.disabled = !webrtcClient.isActiveParticipant;
+    }
+  });
 }
 
 function bindCaptions() {
@@ -1753,9 +1790,14 @@ function handleLeaveRoom() {
   $screenShareGrid.replaceChildren();
   $screenShareGrid.hidden = true;
   $btnShareScreen.disabled = true;
+  $btnToggleCamera.disabled = true;
   $btnToggleCaptions.disabled = true;
   $btnShareScreen.hidden = false;
   $btnStopScreenShare.hidden = true;
+  $btnToggleCamera.textContent = 'Enable Camera';
+  $btnToggleCamera.setAttribute('aria-pressed', 'false');
+  $localCameraVideo.srcObject = null;
+  $localCameraVideo.hidden = true;
 
   // Reset URL
   const url = new URL(window.location.href);
@@ -1807,7 +1849,10 @@ const $peerGrid = document.getElementById('peer-grid');
  * @param {MediaStream} stream - The remote peer's audio/video MediaStream.
  */
 function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peerId)) {
-  if (peerElements.has(peerId)) return; // guard duplicate
+  if (peerElements.has(peerId)) {
+    updatePeerMedia(peerId, stream);
+    return;
+  }
 
   // Build the peer card element
   const li = document.createElement('div');
@@ -1830,6 +1875,7 @@ function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peer
       <span class="peer-name" title="${safeName}">${safeName}</span>
       <span class="peer-role" style="color: var(--emerald)">Attendee</span>
     </div>
+    <video class="peer-video" autoplay playsinline hidden></video>
     <div class="peer-indicators" aria-hidden="true">
       <div class="speaking-ring speaking-ring--inactive" id="ring-${peerId}"></div>
       <div class="peer-mic-icon">
@@ -1848,6 +1894,19 @@ function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peer
   updatePeerCountBadge();
 
   console.log(`[app] Peer card added: ${peerId}`);
+  updatePeerMedia(peerId, stream);
+}
+
+function updatePeerMedia(peerId, stream) {
+  const card = peerElements.get(peerId);
+  if (!card || !stream) return;
+  const video = card.querySelector('.peer-video');
+  const hasVideo = stream.getVideoTracks().length > 0;
+  if (video && hasVideo) {
+    video.srcObject = stream;
+    video.hidden = false;
+    video.play().catch(() => {});
+  }
 }
 
 /**
@@ -1864,6 +1923,8 @@ function removePeerCard(peerId) {
   // Stop the audio element to release resources
   const $audio = $card.querySelector('audio');
   if ($audio) { $audio.pause(); $audio.srcObject = null; }
+  const $video = $card.querySelector('video');
+  if ($video) { $video.pause(); $video.srcObject = null; }
 
   $card.remove();
   peerElements.delete(peerId);

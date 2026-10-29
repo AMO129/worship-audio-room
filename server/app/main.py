@@ -1,5 +1,5 @@
 """
-main.py — FastAPI application entry point for Worship Audio Room.
+main.py — FastAPI application entry point for Worship Room.
 
 Routes (order matters — API routes registered before static mount):
   GET  /health                     → Liveness probe for Render/cloud health checks.
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # ─── Application Factory ──────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Worship Audio Room",
+    title="Worship Room",
     description="Real-time virtual meeting platform with intelligent P&W audio deck.",
     version="1.0.0",
     docs_url="/api/docs",

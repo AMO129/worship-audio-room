@@ -1,4 +1,4 @@
-# Worship Audio Room
+# Worship Room
 
 > A real-time virtual meeting platform with an intelligent praise & worship audio deck.
 

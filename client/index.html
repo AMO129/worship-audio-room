@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Worship Audio Room — Real-time virtual meeting platform with an intelligent praise & worship audio deck." />
-  <title>Worship Audio Room</title>
+  <meta name="description" content="Worship Room — Real-time worship meeting platform with audio, video, and collaboration." />
+  <title>Worship Room</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -26,7 +26,7 @@
           <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
         </svg>
       </div>
-      <h1 class="auth-overlay-title">Worship Audio Room</h1>
+      <h1 class="auth-overlay-title">Worship Room</h1>
       <p class="auth-overlay-subtitle">Sign in with your Google account to create or join a call</p>
 
       <!-- Google GIS renders its button here -->
@@ -50,7 +50,7 @@
     <div class="header-inner">
 
       <!-- Logo & Wordmark -->
-      <div class="brand" aria-label="Worship Audio Room">
+      <div class="brand" aria-label="Worship Room">
         <div class="brand-icon" aria-hidden="true">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
@@ -60,8 +60,8 @@
           </svg>
         </div>
         <div class="brand-text">
-          <span class="brand-name">Worship Audio Room</span>
-          <span class="brand-tagline">Intelligent Praise &amp; Worship Console</span>
+          <span class="brand-name">Worship Room</span>
+          <span class="brand-tagline">Praise, worship, and fellowship</span>
         </div>
       </div>
 
@@ -159,6 +159,9 @@
             <button id="btn-stop-screen-share" class="btn btn-danger" type="button" hidden aria-label="Stop screen sharing">
               Stop Sharing
             </button>
+            <button id="btn-toggle-camera" class="btn btn-ghost" type="button" disabled aria-pressed="false" aria-label="Enable camera">
+              Enable Camera
+            </button>
             <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">
               Start Captions
             </button>
@@ -185,6 +188,7 @@
 
           <!-- Local Peer Card (Self) -->
           <div class="peer-card peer-card--self" role="listitem" data-peer-id="local">
+            <video id="local-camera-video" class="peer-video" autoplay muted playsinline hidden></video>
             <div class="peer-avatar" aria-hidden="true">
               <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                 <circle cx="16" cy="12" r="6" fill="#38bdf8" opacity="0.8"/>
@@ -760,7 +764,7 @@
       </div>
 
       <div class="footer-brand">
-        <span>Worship Audio Room</span>
+        <span>Worship Room</span>
         <span class="footer-dot" aria-hidden="true">·</span>
         <span>Phase 1–6 Build</span>
       </div>
@@ -771,7 +775,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=12"></script>
+  <script type="module" src="js/app.js?v=13"></script>
 
 </body>
 </html>

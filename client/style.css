@@ -439,6 +439,18 @@ body {
 .peer-card--reconnecting { border-color: var(--amber); }
 .peer-card--connection-failed { border-color: var(--crimson); }
 
+.peer-video {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-sm);
+  background: #080b10;
+  object-fit: cover;
+}
+
+.peer-video[hidden] { display: none; }
+
 .peer-moderation-controls {
   display: flex;
   align-items: center;

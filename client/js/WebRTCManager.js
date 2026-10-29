@@ -21,6 +21,7 @@ export class WebRTCManager {
     this._clientId      = null;
     this._roomId        = null;
     this._audioManager  = null;
+    this._cameraStream = null;
     this._pingInterval  = null;
     this._audioContainer = null;
     this._userName      = 'Host';
@@ -60,6 +61,9 @@ export class WebRTCManager {
     this.onScreenShareStopped = null; // () => void
     this.onRemoteScreenShare = null; // (peerId, stream) => void
     this.onRemoteScreenShareStopped = null; // (peerId) => void
+    this.onRemoteStream = null; // (peerId, stream) => void
+    this.onCameraStarted = null; // (stream) => void
+    this.onCameraStopped = null; // () => void
   }
 
   // ─────────────────────────────────────────────
@@ -138,6 +142,7 @@ export class WebRTCManager {
     clearTimeout(this._reconnectTimer);
     this._reconnectTimer = null;
     this.stopScreenShare();
+    this.stopCamera();
 
     for (const [peerId, pc] of this.screenReceivers) {
       try { pc.close(); } catch (_) { /* ignore */ }
@@ -226,6 +231,41 @@ export class WebRTCManager {
     return stream;
   }
 
+  async startCamera() {
+      if (!this.isActiveParticipant) throw new Error('Join the room before enabling your camera.');
+      if (this._cameraStream) return this._cameraStream;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error('No camera video track was available.');
+      this._cameraStream = stream;
+      track.addEventListener('ended', () => this.stopCamera(), { once: true });
+      this.onCameraStarted?.(stream);
+      for (const [peerId, pc] of this.peers) {
+        const transceiver = this._getVideoTransceiver(pc);
+        await transceiver.sender.replaceTrack(track);
+        await this._renegotiate(peerId, pc);
+    }
+    return stream;
+  }
+
+  stopCamera() {
+      if (!this._cameraStream) return;
+      const stream = this._cameraStream;
+      this._cameraStream = null;
+      for (const pc of this.peers.values()) {
+        const transceiver = this._getVideoTransceiver(pc);
+        transceiver.sender.replaceTrack(null).catch((error) => {
+          console.warn('[WebRTCManager] Could not stop camera track:', error.message);
+        });
+      }
+      stream.getTracks().forEach((track) => track.stop());
+      this.onCameraStopped?.();
+      for (const [peerId, pc] of this.peers) this._renegotiate(peerId, pc);
+  }
+
   stopScreenShare() {
     if (!this._screenStream) return;
     const stream = this._screenStream;
@@ -272,6 +312,7 @@ export class WebRTCManager {
   get clientId()      { return this._clientId; }
   get peerCount()     { return this.peers.size; }
   get isConnected()   { return this._ws?.readyState === WebSocket.OPEN; }
+  get cameraActive()  { return Boolean(this._cameraStream); }
   get isHost()        { return this._hostId !== null && this._clientId === this._hostId; }
   get isActiveParticipant() { return this._isAdmitted; }
   get hostId()        { return this._hostId; }
@@ -452,6 +493,9 @@ export class WebRTCManager {
       audioTransceiver.direction = 'sendrecv';
       const track = this._getLocalTrack();
       if (track) await audioTransceiver.sender.replaceTrack(track);
+      const videoTransceiver = this._getVideoTransceiver(pc);
+      videoTransceiver.direction = 'sendrecv';
+      await videoTransceiver.sender.replaceTrack(this._getCameraTrack());
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -478,6 +522,9 @@ export class WebRTCManager {
         const track = this._getLocalTrack();
         if (track) await audioTransceiver.sender.replaceTrack(track);
       }
+      const videoTransceiver = this._getVideoTransceiver(pc);
+      videoTransceiver.direction = 'sendrecv';
+      await videoTransceiver.sender.replaceTrack(this._getCameraTrack());
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -574,6 +621,23 @@ export class WebRTCManager {
     return pc;
   }
 
+  _getVideoTransceiver(pc) {
+    let transceiver = pc.getTransceivers().find((item) => item.receiver.track?.kind === 'video');
+    if (!transceiver) transceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+    return transceiver;
+  }
+
+  async _renegotiate(peerId, pc) {
+    if (pc.signalingState !== 'stable') return;
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      this._send({ type: 'offer', target_id: peerId, sdp: offer.sdp });
+    } catch (error) {
+      console.error(`[WebRTCManager] Camera renegotiation with ${peerId} failed:`, error);
+    }
+  }
+
   // ─────────────────────────────────────────────
   // Audio element helpers
   // ─────────────────────────────────────────────
@@ -599,6 +663,7 @@ export class WebRTCManager {
     el.play().catch((err) => {
       console.warn(`[WebRTCManager] Autoplay blocked for peer ${peerId}:`, err.message);
     });
+    this.onRemoteStream?.(peerId, stream);
   }
 
   /**
@@ -819,6 +884,10 @@ export class WebRTCManager {
    */
   _getLocalTrack() {
     return this._audioManager?.destinationNode?.stream?.getAudioTracks()[0] ?? null;
+  }
+
+  _getCameraTrack() {
+    return this._cameraStream?.getVideoTracks()[0] ?? null;
   }
 
   /** Ensure the hidden audio container div exists in the DOM. */
