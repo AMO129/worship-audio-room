@@ -122,6 +122,8 @@ export class AudioManager {
      * Default: 1.0 (full pass-through).
      */
     this._masterVolumeGain = null;
+    this._voiceOutputGain = null;
+    this._duckingEnabled = true;
 
     /** Last computed RMS level in dBFS. Exposed via getCurrentDecibels(). */
     this._currentDb = -Infinity;
@@ -249,6 +251,9 @@ export class AudioManager {
     this._destinationNode = this.ctx.createMediaStreamDestination();
     this._masterVolumeGain.connect(this.ctx.destination);
     this._masterVolumeGain.connect(this._destinationNode);
+    this._voiceOutputGain = this.ctx.createGain();
+    this._voiceOutputGain.gain.value = 1;
+    this._voiceOutputGain.connect(this._destinationNode);
 
     // ── Build dual-deck gain nodes ────────────────────────────────────────────
     this._gainNodeA = this.ctx.createGain();
@@ -322,6 +327,7 @@ export class AudioManager {
     this._micSource?.disconnect();
     this._voiceBPF?.disconnect();
     this._voiceAnalyser?.disconnect();
+    this._voiceOutputGain?.disconnect();
     this._micSource = null;
     this._voiceBPF = null;
     this._voiceAnalyser = null;
@@ -440,7 +446,7 @@ export class AudioManager {
     // Note: analyser is a dead-end; Web Audio doesn't require connect to destination.
 
     // ── Route RAW mic to the outgoing WebRTC stream (uncoloured voice) ────────
-    this._micSource.connect(this._destinationNode);
+    this._micSource.connect(this._voiceOutputGain);
 
     // ── Start real-time processing loop ──────────────────────────────────────
     this._startAnalysisLoop();
@@ -520,6 +526,10 @@ export class AudioManager {
    */
   _updateFSM(db) {
     const now = this.ctx.currentTime;
+    if (!this._duckingEnabled) {
+      this._masterMusicGain.gain.setTargetAtTime(this.VOL_SWELL, now, 0.1);
+      return;
+    }
 
     // ── Priority 1: CLIMAX — loud voice above -16 dBFS ───────────────────────
     if (db > this.CLIMAX_UPPER) {
@@ -1050,6 +1060,19 @@ export class AudioManager {
       this.ctx.currentTime,
       0.05  // τ = 50 ms — imperceptibly fast but avoids zipper noise
     );
+  }
+
+  setVoiceGain(linearValue) {
+    const clamped = Math.min(Math.max(linearValue, 0), 1);
+    if (!this._voiceOutputGain || !this.ctx) return;
+    this._voiceOutputGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.05);
+  }
+
+  setSmartDucking(enabled) {
+    this._duckingEnabled = Boolean(enabled);
+    if (!this._duckingEnabled && this._masterMusicGain && this.ctx) {
+      this._masterMusicGain.gain.setTargetAtTime(this.VOL_SWELL, this.ctx.currentTime, 0.1);
+    }
   }
 
   /**

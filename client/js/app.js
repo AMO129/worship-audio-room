@@ -13,7 +13,7 @@
  * @module app
  */
 
-import { AudioManager, EngineState } from './AudioManager.js?v=3';
+import { AudioManager, EngineState } from './AudioManager.js?v=4';
 import { WebRTCManager }              from './WebRTCManager.js?v=14';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -234,6 +234,8 @@ const $peerCountBadge   = document.getElementById('peer-count-badge');
 const $participantCount = document.getElementById('participant-count');
 const $signalQuality    = document.getElementById('signal-quality');
 const $roomModeDisplay  = document.getElementById('room-mode-display');
+const $headerRoomName = document.getElementById('header-room-name');
+const $headerHostIndicator = document.getElementById('header-host-indicator');
 
 // -- Footer Metrics --
 const $metricSampleRate = document.getElementById('metric-sample-rate');
@@ -286,6 +288,13 @@ const $reactionMenu = document.getElementById('reaction-menu');
 const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
 const $audioDeck = document.getElementById('audio-deck');
 const $audioConsoleBackdrop = document.getElementById('audio-console-backdrop');
+const $btnHeaderMore = document.getElementById('btn-header-more');
+const $headerMoreMenu = document.getElementById('header-more-menu');
+const $btnBackgroundSound = document.getElementById('btn-background-sound');
+const $btnSmartDucking = document.getElementById('btn-smart-ducking');
+const $consoleMusicLevel = document.getElementById('console-music-level');
+const $consoleVoiceLevel = document.getElementById('console-voice-level');
+const $consoleAmbienceLevel = document.getElementById('console-ambience-level');
 const $scheduleModal = document.getElementById('schedule-modal');
 const $btnCloseSchedule = document.getElementById('btn-close-schedule');
 const $scheduleRoom = document.getElementById('schedule-room');
@@ -407,6 +416,66 @@ function bindCollaborationTools() {
       $btnToggleAudioConsole.click();
     }
   });
+  $btnHeaderMore?.addEventListener('click', () => {
+    $headerMoreMenu.hidden = !$headerMoreMenu.hidden;
+    $btnHeaderMore.setAttribute('aria-expanded', String(!$headerMoreMenu.hidden));
+  });
+  $headerMoreMenu?.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-header-action]')?.dataset.headerAction;
+    if (!action) return;
+    if (action === 'console') $btnToggleAudioConsole.click();
+    if (action === 'settings') showAlert('Audio and video settings are available through your browser permissions.', 'info');
+    if (action === 'brief') downloadDesignBrief();
+    $headerMoreMenu.hidden = true;
+    $btnHeaderMore.setAttribute('aria-expanded', 'false');
+  });
+  $btnBackgroundSound?.addEventListener('click', () => {
+    const enabled = $btnBackgroundSound.getAttribute('aria-checked') !== 'true';
+    $btnBackgroundSound.setAttribute('aria-checked', String(enabled));
+    if (!enabled) audioManager.pauseMusic();
+    else audioManager.resumeMusic().catch((error) => {
+      console.warn('[app] Could not resume background sound:', error);
+    });
+  });
+  $btnSmartDucking?.addEventListener('click', () => {
+    const enabled = $btnSmartDucking.getAttribute('aria-checked') !== 'true';
+    $btnSmartDucking.setAttribute('aria-checked', String(enabled));
+    audioManager.setSmartDucking(enabled);
+  });
+  bindConsoleSlider($consoleMusicLevel, value => audioManager.setMasterGain(value));
+  bindConsoleSlider($consoleVoiceLevel, value => audioManager.setVoiceGain(value));
+  bindConsoleSlider($consoleAmbienceLevel, () => {});
+  document.querySelectorAll('[data-console-preset]').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-console-preset]').forEach(item => item.classList.remove('is-selected'));
+      button.classList.add('is-selected');
+      const preset = button.dataset.consolePreset;
+      const definition = preset === 'quiet'
+        ? PRESET_DEFINITIONS['d-minor-drone']
+        : preset === 'joyful'
+          ? PRESET_DEFINITIONS['g-major']
+          : PRESET_DEFINITIONS['c-major'];
+      playProceduralTrack(definition);
+    });
+  });
+}
+
+function bindConsoleSlider(input, onChange) {
+  input?.addEventListener('input', () => {
+    const value = Number(input.value) / 100;
+    input.nextElementSibling.textContent = `${input.value}%`;
+    onChange(value);
+  });
+}
+
+function downloadDesignBrief() {
+  const contents = 'Worship Audio Room\\n\\nA focused worship meeting with room audio, participant video, chat history, reactions, and smart voice ducking.';
+  const url = URL.createObjectURL(new Blob([contents], { type: 'text/plain' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'worship-audio-room-design-brief.txt';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function bindScheduleCall() {
@@ -1973,6 +2042,7 @@ function completeRoomJoin() {
   $btnJoin.disabled = true;
   $roomIdInput.disabled = true;
   $roomModeDisplay.textContent = 'Live';
+  $headerRoomName.textContent = currentRoomId || 'Room';
   $signalQuality.textContent = 'Excellent';
   $signalQuality.className = 'stage-info-value stage-info-value--good';
   updateHostControls();
@@ -2066,6 +2136,7 @@ function handleLeaveRoom() {
 
   setConnectionStatus('disconnected', 'Disconnected');
   $roomModeDisplay.textContent = 'Lobby';
+  $headerRoomName.textContent = 'Lobby';
   $signalQuality.textContent   = 'Good';
   $signalQuality.className     = 'stage-info-value';
 
@@ -2193,6 +2264,7 @@ function updatePeerCountBadge() {
 function updateHostControls() {
   const isInRoom = Boolean(currentRoomId && webrtcClient.isActiveParticipant);
   const isHost = isInRoom && webrtcClient.isHost;
+  if ($headerHostIndicator) $headerHostIndicator.hidden = !isHost;
   if ($btnMuteEveryone) {
     $btnMuteEveryone.hidden = !isHost;
     $btnMuteEveryone.disabled = !isHost;

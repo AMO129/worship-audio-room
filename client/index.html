@@ -59,6 +59,11 @@
             <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
           </svg>
         </div>
+        <div class="room-name-badge">
+          <span class="room-name-badge-label">ROOM</span>
+          <span id="header-room-name">Lobby</span>
+          <span id="header-host-indicator" class="host-indicator" hidden>HOST</span>
+        </div>
         <div class="brand-text">
           <span class="brand-name">Worship Room</span>
           <span class="brand-tagline">Praise, worship, and fellowship</span>
@@ -93,9 +98,18 @@
           Join Room
         </button>
         <button id="btn-schedule-call" class="btn btn-ghost" type="button">Schedule</button>
-        <button id="btn-toggle-audio-console" class="btn btn-ghost" type="button" aria-expanded="false" aria-controls="audio-deck">
-          Audio Console
+        <button id="btn-toggle-audio-console" class="btn btn-ghost worship-console-trigger" type="button" aria-expanded="false" aria-controls="audio-deck">
+          <span class="console-trigger-icon">☷</span>
+          <span><strong>Worship Console</strong><small>Sound &amp; ambience</small></span>
         </button>
+        <div class="header-more-menu-wrap">
+          <button id="btn-header-more" class="btn btn-ghost" type="button" aria-expanded="false" aria-controls="header-more-menu">More</button>
+          <div id="header-more-menu" class="header-more-menu" hidden>
+            <button type="button" data-header-action="console">Worship Console</button>
+            <button type="button" data-header-action="settings">Audio and video settings</button>
+            <button type="button" data-header-action="brief">Downloadable design brief</button>
+          </div>
+        </div>
         <button id="btn-leave" class="btn btn-danger" disabled aria-label="Leave meeting room">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M2 8h10M9 5l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -166,41 +180,6 @@
             Meeting Stage
           </h2>
           <div class="stage-header-actions">
-            <button id="btn-share-screen" class="btn btn-ghost" type="button" disabled aria-label="Share screen">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect x="1.5" y="2" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M6 14h4M8 11v3M6 6l2-2 2 2M8 4v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Share Screen
-            </button>
-            <button id="btn-stop-screen-share" class="btn btn-danger" type="button" hidden aria-label="Stop screen sharing">
-              Stop Sharing
-            </button>
-            <button id="btn-toggle-camera" class="btn btn-ghost" type="button" disabled aria-pressed="false" aria-label="Enable camera">
-              Enable Camera
-            </button>
-            <button id="btn-raise-hand" class="btn btn-ghost" type="button" disabled aria-pressed="false">
-              Raise Hand
-            </button>
-            <button id="btn-reaction" class="btn btn-ghost" type="button" disabled aria-label="Send reaction">
-              ❤️ React
-            </button>
-            <button id="btn-more-controls" class="btn btn-ghost" type="button" aria-expanded="false">More</button>
-            <div id="more-controls-menu" class="more-controls-menu" hidden>
-              <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">Start Captions</button>
-              <button id="btn-record" class="btn btn-ghost" type="button" disabled aria-pressed="false">Record locally</button>
-              <button id="btn-mute-everyone" class="btn btn-ghost" type="button" disabled hidden>Mute everyone</button>
-            </div>
-            <div class="reaction-menu" id="reaction-menu" hidden>
-              <button type="button" data-reaction="❤️">❤️</button>
-              <button type="button" data-reaction="👏">👏</button>
-              <button type="button" data-reaction="🙏">🙏</button>
-              <button type="button" data-reaction="🙌">🙌</button>
-              <button type="button" data-reaction="🎉">🎉</button>
-              <button type="button" data-reaction="🔥">🔥</button>
-              <button type="button" data-reaction="😂">😂</button>
-              <button type="button" data-reaction="➕">＋</button>
-            </div>
             <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
           </div>
         </div>
@@ -286,6 +265,29 @@
             <span class="stage-info-label">Participants</span>
             <span id="participant-count" class="stage-info-value">1</span>
           </div>
+          <div class="meeting-control-bar" aria-label="Meeting controls">
+            <button id="btn-share-screen" class="control-bar-btn" type="button" disabled aria-label="Share screen">Share</button>
+            <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing">Stop sharing</button>
+            <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Enable camera">Camera</button>
+            <button id="btn-raise-hand" class="control-bar-btn" type="button" disabled aria-pressed="false">Raise hand</button>
+            <div class="reaction-control">
+              <button id="btn-reaction" class="control-bar-btn" type="button" disabled aria-label="Send reaction">Reactions</button>
+              <div class="reaction-menu" id="reaction-menu" hidden>
+                <button type="button" data-reaction="🙏">Prayer</button>
+                <button type="button" data-reaction="❤️">Heart</button>
+                <button type="button" data-reaction="🙌">Praise</button>
+                <button type="button" data-reaction="👏">Applause</button>
+                <button type="button" data-reaction="✨">Sparkle</button>
+                <button type="button" data-reaction="➕">Add emoji</button>
+              </div>
+            </div>
+            <button id="btn-more-controls" class="control-bar-btn" type="button" aria-expanded="false">More</button>
+            <div id="more-controls-menu" class="more-controls-menu" hidden>
+              <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">Start Captions</button>
+              <button id="btn-record" class="btn btn-ghost" type="button" disabled aria-pressed="false">Record locally</button>
+              <button id="btn-mute-everyone" class="btn btn-ghost" type="button" disabled hidden>Mute everyone</button>
+            </div>
+          </div>
           <div class="stage-info-divider" aria-hidden="true"></div>
           <div class="stage-info-item">
             <span class="stage-info-label">Signal</span>
@@ -316,6 +318,26 @@
             Audio Console
           </h2>
           <span class="deck-label">P&amp;W Engine v1.0</span>
+        </div>
+        <div class="console-controls">
+          <div class="console-control-heading">
+            <div><strong>Background sound</strong><span>Music for the room</span></div>
+            <button id="btn-background-sound" class="switch" type="button" role="switch" aria-checked="true"><span></span></button>
+          </div>
+          <div class="console-presets" role="group" aria-label="Sound presets">
+            <button class="console-preset is-selected" type="button" data-console-preset="gentle">Gentle worship<small>Warm keys · 72 BPM</small></button>
+            <button class="console-preset" type="button" data-console-preset="quiet">Quiet prayer<small>Soft pads · No rhythm</small></button>
+            <button class="console-preset" type="button" data-console-preset="joyful">Joyful praise<small>Bright band · 104 BPM</small></button>
+          </div>
+          <div class="console-mix">
+            <label>Background music <input id="console-music-level" type="range" min="0" max="100" value="80"><output>80%</output></label>
+            <label>Speaker voice <input id="console-voice-level" type="range" min="0" max="100" value="100"><output>100%</output></label>
+            <label>Room ambience <input id="console-ambience-level" type="range" min="0" max="100" value="50"><output>50%</output></label>
+          </div>
+          <button id="btn-smart-ducking" class="smart-ducking-card" type="button" role="switch" aria-checked="true">
+            <span><strong>Smart voice ducking</strong><small>Automatically lowers music when someone speaks</small></span>
+            <span class="switch"><span></span></span>
+          </button>
         </div>
 
         <!-- ═══ CARD 1: Preacher Voice Channel ═══ -->
@@ -829,7 +851,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=18"></script>
+  <script type="module" src="js/app.js?v=19"></script>
 
 </body>
 </html>

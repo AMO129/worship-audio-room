@@ -215,6 +215,51 @@ body {
   letter-spacing: 0.02em;
 }
 
+.room-name-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: rgba(255,255,255,.025);
+  color: var(--text-secondary);
+  font-size: .75rem;
+}
+.room-name-badge-label { color: var(--text-muted); font: 600 .6rem var(--font-mono); letter-spacing: .08em; }
+.room-name-badge #header-room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.host-indicator { color: var(--amber); font: 700 .6rem var(--font-mono); }
+.worship-console-trigger { display: inline-flex; align-items: center; gap: 8px; text-align: left; }
+.worship-console-trigger small { display: block; color: var(--text-muted); font-size: .62rem; }
+.console-trigger-icon { color: var(--amber); font-size: 1.1rem; }
+.header-more-menu-wrap { position: relative; }
+.header-more-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 140;
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+.header-more-menu[hidden] { display: none; }
+.header-more-menu button {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.header-more-menu button:hover { color: var(--text-primary); background: var(--bg-hover); }
+
 /* Room Controls */
 .room-controls {
   display: flex;
@@ -665,6 +710,36 @@ body {
 .stage-info-value--good { color: var(--emerald); }
 .stage-info-divider { width: 1px; height: 28px; background: var(--border-subtle); flex-shrink: 0; }
 
+.meeting-control-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  background: rgba(10, 15, 26, .72);
+}
+.control-bar-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-full);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: 600 .72rem var(--font-ui);
+  cursor: pointer;
+}
+.control-bar-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--blue); }
+.control-bar-btn:disabled { opacity: .45; cursor: not-allowed; }
+.control-bar-btn--danger { color: var(--crimson); }
+.reaction-control { position: relative; }
+.reaction-menu { left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); flex-wrap: wrap; width: 250px; }
+.reaction-menu button { padding: 7px 9px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-primary); cursor: pointer; }
+.reaction-menu button:hover { background: var(--bg-hover); }
+
 /* ══════════════════════════════════════════════════════════════════════════
    AUDIO DECK (Right Column)
    ══════════════════════════════════════════════════════════════════════════ */
@@ -696,6 +771,34 @@ body {
   opacity: 1;
   visibility: visible;
 }
+
+.console-controls { display: grid; gap: var(--sp-4); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border-subtle); }
+.console-control-heading, .smart-ducking-card { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.console-control-heading strong, .smart-ducking-card strong { display: block; color: var(--text-primary); font-size: .82rem; }
+.console-control-heading span, .smart-ducking-card small { display: block; color: var(--text-muted); font-size: .68rem; }
+.switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--r-full);
+  background: var(--text-muted);
+  cursor: pointer;
+}
+.switch span { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: transform var(--t-fast); }
+.switch[aria-checked="true"] { background: var(--emerald); }
+.switch[aria-checked="true"] span { transform: translateX(16px); }
+.console-presets { display: grid; gap: var(--sp-2); }
+.console-preset { padding: 9px 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: transparent; color: var(--text-secondary); text-align: left; cursor: pointer; }
+.console-preset small { display: block; margin-top: 2px; color: var(--text-muted); font-size: .65rem; }
+.console-preset.is-selected, .console-preset:hover { border-color: var(--amber); background: var(--amber-dim); color: var(--text-primary); }
+.console-mix { display: grid; gap: var(--sp-3); }
+.console-mix label { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: var(--text-secondary); font-size: .7rem; }
+.console-mix input { grid-column: 1 / -1; width: 100%; accent-color: var(--amber); }
+.console-mix output { color: var(--text-muted); font: .65rem var(--font-mono); }
+.smart-ducking-card { padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: rgba(255,255,255,.025); color: inherit; text-align: left; cursor: pointer; }
+.smart-ducking-card[aria-checked="true"] { border-color: var(--amber); }
 
 .drawer-backdrop {
   position: fixed;
@@ -1766,6 +1869,7 @@ body {
   }
 
   .brand-tagline { display: none; }
+  .room-name-badge { display: none; }
 
   .room-controls {
     gap: var(--sp-2);
