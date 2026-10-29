@@ -1693,6 +1693,19 @@ body {
     left: 0;
   }
 
+  .share-invite-label {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+  }
+
+  .share-email-input {
+    width: 100%;
+    margin: 4px 0;
+    box-sizing: border-box;
+  }
+
   .stage-grid { gap: var(--sp-3); }
 
   .peer-grid { grid-template-columns: repeat(2, 1fr); }

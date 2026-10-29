@@ -118,6 +118,26 @@ are labeled with the server-authoritative speaker name, and are not stored.
 Browsers without speech recognition support leave the captions control
 unavailable. The browser asks for microphone permission when captions start;
 captions should only be enabled after participants have consented to live
+
+### PostgreSQL persistence
+
+Set `DATABASE_URL` to a PostgreSQL connection string in Render. On first use,
+the server creates tables for room tombstones and bounded recent chat history.
+Ended room links remain invalid after a process restart, and authenticated
+participants receive recent chat history when they join. If `DATABASE_URL` is
+unset, development continues with the existing in-memory room state and
+ephemeral chat behavior.
+
+The meeting stage also includes ephemeral raise-hand and emoji reactions,
+host-only mute-all moderation, and in-room poll/Q&A signaling. These controls
+are intentionally held in the active server process and are not retained after
+the room ends.
+
+The **Record locally** action uses the browser `MediaRecorder` API and downloads
+the captured local worship stream; recordings are never uploaded. The
+**Calendar invite** action downloads a provider-independent `.ics` invitation
+containing the current room URL. Both actions are opt-in and browser support
+varies.
 transcription.
 
 ## License

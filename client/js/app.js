@@ -14,7 +14,7 @@
  */
 
 import { AudioManager, EngineState } from './AudioManager.js?v=3';
-import { WebRTCManager }              from './WebRTCManager.js?v=12';
+import { WebRTCManager }              from './WebRTCManager.js?v=13';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -256,6 +256,8 @@ const $shareNative    = document.getElementById('share-native');
 const $shareWhatsapp  = document.getElementById('share-whatsapp');
 const $shareEmail     = document.getElementById('share-email');
 const $btnCopyLink    = document.getElementById('btn-copy-link');
+const $shareEmailAddress = document.getElementById('share-email-address');
+const $btnInviteEmail = document.getElementById('btn-invite-email');
 const $btnToggleChat  = document.getElementById('btn-toggle-chat');
 const $chatToggleLabel = document.getElementById('chat-toggle-label');
 const $chatSidebar    = document.getElementById('chat-sidebar');
@@ -273,11 +275,19 @@ const $btnStopScreenShare = document.getElementById('btn-stop-screen-share');
 const $btnToggleCamera = document.getElementById('btn-toggle-camera');
 const $localCameraVideo = document.getElementById('local-camera-video');
 const $btnToggleCaptions = document.getElementById('btn-toggle-captions');
+const $btnRaiseHand = document.getElementById('btn-raise-hand');
+const $btnReaction = document.getElementById('btn-reaction');
+const $btnRecord = document.getElementById('btn-record');
+const $btnCalendar = document.getElementById('btn-calendar');
+const $btnMuteEveryone = document.getElementById('btn-mute-everyone');
 const $screenShareGrid = document.getElementById('screen-share-grid');
 const $captionsPanel = document.getElementById('captions-panel');
 const $captionsFeed = document.getElementById('captions-feed');
 let captionRecognition = null;
 let captionsActive = false;
+let handRaised = false;
+let recorder = null;
+let recordingChunks = [];
 
 // -- Auth Overlay --
 const $authOverlay      = document.getElementById('auth-overlay');
@@ -318,6 +328,101 @@ function bindPlayPause() {
     if (!audioManager.ctx) {
       showAlert('Select a track to start playback.', 'info');
       return;
+    }
+
+    function bindCollaborationTools() {
+      $btnRaiseHand?.addEventListener('click', () => {
+        handRaised = !handRaised;
+        webrtcClient.setHandRaised(handRaised);
+        $btnRaiseHand.textContent = handRaised ? 'Lower Hand' : 'Raise Hand';
+        $btnRaiseHand.setAttribute('aria-pressed', String(handRaised));
+      });
+      $btnReaction?.addEventListener('click', () => webrtcClient.sendReaction('❤️'));
+      $btnMuteEveryone?.addEventListener('click', () => {
+        webrtcClient.muteEveryone();
+        showAlert('Everyone has been muted.', 'info');
+      });
+      $btnRecord?.addEventListener('click', toggleLocalRecording);
+      $btnCalendar?.addEventListener('click', downloadCalendarInvite);
+    }
+
+    function handleRoomNotification(message) {
+      const text = message?.body || message?.message || 'Room update';
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Worship Room', { body: text });
+      }
+      showAlert(text, 'info');
+    }
+
+    function toggleLocalRecording() {
+      if (recorder?.state === 'recording') {
+        recorder.stop();
+        return;
+      }
+      const audioStream = audioManager.destinationNode?.stream;
+      if (!audioStream || typeof MediaRecorder === 'undefined') {
+        showAlert('Local recording is not supported in this browser yet.', 'warn');
+        return;
+      }
+      const stream = new MediaStream(audioStream.getTracks());
+      if ($localCameraVideo?.srcObject) {
+        $localCameraVideo.srcObject.getVideoTracks().forEach(track => stream.addTrack(track));
+      }
+      recordingChunks = [];
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch (error) {
+        console.error('[app] Could not start local recording:', error);
+        showAlert('Could not start local recording.', 'error');
+        return;
+      }
+      recorder.ondataavailable = event => {
+        if (event.data.size) recordingChunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordingChunks, { type: recorder.mimeType || 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `worship-room-${new Date().toISOString().replaceAll(':', '-')}.webm`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        recordingChunks = [];
+        $btnRecord.textContent = 'Record locally';
+        $btnRecord.setAttribute('aria-pressed', 'false');
+      };
+      recorder.start();
+      $btnRecord.textContent = 'Stop recording';
+      $btnRecord.setAttribute('aria-pressed', 'true');
+    }
+
+    function downloadCalendarInvite() {
+      if (!currentRoomId) return;
+      const start = new Date();
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const format = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+      const roomUrl = getCleanRoomUrl(currentRoomId);
+      const ics = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Worship Room//EN',
+        'BEGIN:VEVENT',
+        `UID:${currentRoomId}@worship-room`,
+        `DTSTAMP:${format(new Date())}`,
+        `DTSTART:${format(start)}`,
+        `DTEND:${format(end)}`,
+        'SUMMARY:Worship Room gathering',
+        `DESCRIPTION:Join Worship Room: ${roomUrl}`,
+        `URL:${roomUrl}`,
+        'END:VEVENT',
+        'END:VCALENDAR',
+      ].join('\r\n');
+      const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `worship-room-${currentRoomId}.ics`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     if (audioManager._isMusicPlaying) {
@@ -367,6 +472,21 @@ async function bootstrap() {
   webrtcClient.onRemoteStream = updatePeerMedia;
   webrtcClient.onPeerRenamed  = updatePeerDisplayName;
   webrtcClient.onCaption = renderCaption;
+  webrtcClient.onRaiseHand = (message) => {
+    const name = webrtcClient.getPeerName(message.peer_id) || message.peer_id;
+    showAlert(`${name} ${message.raised ? 'raised' : 'lowered'} their hand.`, 'info');
+  };
+  webrtcClient.onReaction = (message) => {
+    const name = webrtcClient.getPeerName(message.peer_id) || 'Someone';
+    showAlert(`${name} reacted ${message.emoji || ''}`, 'info');
+  };
+  webrtcClient.onPoll = (message) => {
+    showAlert(message.question ? `Poll: ${message.question}` : 'Poll updated.', 'info');
+  };
+  webrtcClient.onQuestion = (message) => {
+    showAlert(message.text ? `Question: ${message.text}` : 'Question updated.', 'info');
+  };
+  webrtcClient.onNotification = handleRoomNotification;
   webrtcClient.onPeerLeft     = removePeerCard;
   webrtcClient.onHostChange   = updateHostControls;
   webrtcClient.onPeerMuted    = (peerId) => updatePeerModerationControls(peerId);
@@ -443,6 +563,7 @@ async function bootstrap() {
   bindShareMenu();
   bindChat();
   bindPlayPause();
+  bindCollaborationTools();
 
   // Initialise UI to a known idle state
   syncFSMBadge(EngineState.SWELL);
@@ -1661,6 +1782,10 @@ function removeScreenShareTile(peerId) {
  * then hands the AudioManager's outgoing stream to WebRTC (if live).
  */
 async function handleJoinRoom() {
+  if (currentRoomId || webrtcClient.isConnected || webrtcClient.isActiveParticipant) {
+    showAlert('You are already in a room. Leave it before joining another call.', 'warn');
+    return;
+  }
   const roomId = $roomIdInput.value.trim().toLowerCase().replace(/\s+/g, '-');
 
   // Block if no valid user session exists
@@ -1748,6 +1873,13 @@ function completeRoomJoin() {
   $btnEmojiPicker.disabled = false;
   $btnShareScreen.disabled = false;
   $btnToggleCaptions.disabled = false;
+  $btnToggleCamera.disabled = false;
+  $btnRaiseHand.disabled = false;
+  $btnReaction.disabled = false;
+  $btnRecord.disabled = false;
+  $btnCalendar.disabled = false;
+  $btnJoin.disabled = true;
+  $roomIdInput.disabled = true;
   $roomModeDisplay.textContent = 'Live';
   $signalQuality.textContent = 'Excellent';
   $signalQuality.className = 'stage-info-value stage-info-value--good';
@@ -1806,6 +1938,16 @@ function handleLeaveRoom() {
   $btnShareScreen.disabled = true;
   $btnToggleCamera.disabled = true;
   $btnToggleCaptions.disabled = true;
+  $btnRaiseHand.disabled = true;
+  $btnReaction.disabled = true;
+  $btnRecord.disabled = true;
+  $btnCalendar.disabled = true;
+  $btnMuteEveryone.disabled = true;
+  $btnMuteEveryone.hidden = true;
+  if (recorder?.state === 'recording') recorder.stop();
+  handRaised = false;
+  $btnRaiseHand.textContent = 'Raise Hand';
+  $btnRaiseHand.setAttribute('aria-pressed', 'false');
   $btnShareScreen.hidden = false;
   $btnStopScreenShare.hidden = true;
   $btnToggleCamera.textContent = 'Enable Camera';
@@ -1960,6 +2102,10 @@ function updatePeerCountBadge() {
 function updateHostControls() {
   const isInRoom = Boolean(currentRoomId && webrtcClient.isActiveParticipant);
   const isHost = isInRoom && webrtcClient.isHost;
+  if ($btnMuteEveryone) {
+    $btnMuteEveryone.hidden = !isHost;
+    $btnMuteEveryone.disabled = !isHost;
+  }
   if ($localPeerName) $localPeerName.textContent = webrtcClient.userName || 'You';
   if ($localPeerRole) {
     $localPeerRole.textContent = isInRoom
@@ -2370,6 +2516,18 @@ function bindShareMenu() {
       console.error('[app] Copy failed:', err);
       showAlert('Failed to copy link. Please copy the URL manually.', 'warn');
     }
+  });
+
+  $btnInviteEmail?.addEventListener('click', () => {
+    const recipient = $shareEmailAddress.value.trim();
+    if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      showAlert('Enter a valid email address first.', 'warn');
+      $shareEmailAddress.focus();
+      return;
+    }
+    const message = `Join my Worship Room: ${getMeetingShareUrl()}`;
+    window.location.href = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
+    closeShareMenu();
   });
 
   document.addEventListener('click', (event) => {

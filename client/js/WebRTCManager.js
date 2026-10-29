@@ -65,6 +65,11 @@ export class WebRTCManager {
     this.onRemoteStream = null; // (peerId, stream) => void
     this.onCameraStarted = null; // (stream) => void
     this.onCameraStopped = null; // () => void
+    this.onRaiseHand = null; // (msg) => void
+    this.onReaction = null; // (msg) => void
+    this.onPoll = null; // (msg) => void
+    this.onQuestion = null; // (msg) => void
+    this.onNotification = null; // (msg) => void
   }
 
   // ─────────────────────────────────────────────
@@ -197,6 +202,35 @@ export class WebRTCManager {
     this._send({ type: 'caption', text, is_final: isFinal });
   }
 
+  setHandRaised(raised) {
+    this._send({ type: 'raise-hand', raised: Boolean(raised) });
+  }
+
+  sendReaction(reaction) {
+    const value = String(reaction ?? '').trim();
+    if (value) this._send({ type: 'emoji-reaction', emoji: value.slice(0, 16) });
+  }
+
+  createPoll(question, options) {
+    this._send({ type: 'poll-create', question, options });
+  }
+
+  votePoll(pollId, optionIndex) {
+    this._send({ type: 'poll-vote', poll_id: pollId, option_index: optionIndex });
+  }
+
+  askQuestion(text) {
+    this._send({ type: 'question-submit', text });
+  }
+
+  answerQuestion(questionId) {
+    this._send({ type: 'question-answer', question_id: questionId });
+  }
+
+  muteEveryone() {
+    if (this.isHost) this._send({ type: 'mute-all', muted: true });
+  }
+
   setDisplayName(displayName) {
     const name = String(displayName ?? '').trim();
     if (name && this.isConnected) {
@@ -300,9 +334,17 @@ export class WebRTCManager {
     const track = this._getLocalTrack();
     if (!track) return;
 
-    for (const pc of this.peers.values()) {
-      const sender = pc.getSenders().find((item) => item.track?.kind === 'audio' || item.track === null);
-      sender?.replaceTrack(track).catch(console.warn);
+    for (const [peerId, pc] of this.peers) {
+      let transceiver = pc.getTransceivers().find(
+        (item) => item.receiver.track?.kind === 'audio',
+      );
+      if (!transceiver) {
+        transceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+      }
+      transceiver.direction = 'sendrecv';
+      transceiver.sender.replaceTrack(track)
+        .then(() => this._renegotiate(peerId, pc))
+        .catch((error) => console.warn('[WebRTCManager] Could not refresh audio track:', error));
     }
   }
 
@@ -362,7 +404,18 @@ export class WebRTCManager {
       case 'screen-ice-candidate': this._handleScreenCandidate(msg); break;
       case 'screen-share-stop': this._onScreenShareStop(msg); break;
       case 'chat-message':  this.onChatMessage?.(msg);     break;
+      case 'chat-history':
+        for (const message of msg.messages ?? []) this.onChatMessage?.(message);
+        break;
       case 'caption':       this.onCaption?.(msg);         break;
+      case 'raise-hand':    this.onRaiseHand?.(msg);       break;
+      case 'emoji-reaction': this.onReaction?.(msg);        break;
+      case 'poll-created':
+      case 'poll-vote':
+      case 'poll-closed':    this.onPoll?.(msg);             break;
+      case 'question-submitted':
+      case 'question-answered': this.onQuestion?.(msg);     break;
+      case 'browser-notification': this.onNotification?.(msg); break;
       case 'pong':          /* intentionally ignored */    break;
       default:
         console.debug('[WebRTCManager] Unknown message type:', msg.type);
@@ -436,6 +489,9 @@ export class WebRTCManager {
 
     if (this._clientId.localeCompare(remotePeerId) < 0) {
       if (isNewPeer) this._initiateOffer(remotePeerId, pc);
+    }
+    if (this._screenStream && !this.screenSenders.has(remotePeerId)) {
+      this._createScreenSender(remotePeerId, this._screenStream);
     }
   }
 

@@ -114,6 +114,9 @@
             <a id="share-whatsapp" role="menuitem" target="_blank" rel="noopener noreferrer">WhatsApp</a>
             <a id="share-email" role="menuitem">Email</a>
             <button id="btn-copy-link" type="button" role="menuitem">Copy link</button>
+            <label class="share-invite-label" for="share-email-address">Invite by email</label>
+            <input id="share-email-address" class="share-email-input" type="email" placeholder="person@example.com" autocomplete="email" />
+            <button id="btn-invite-email" type="button" role="menuitem">Open email invitation</button>
           </div>
         </div>
         <button id="btn-toggle-chat" class="btn btn-ghost" type="button" aria-label="Hide chat" aria-pressed="false" aria-controls="chat-sidebar">
@@ -174,6 +177,21 @@
             </button>
             <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">
               Start Captions
+            </button>
+            <button id="btn-raise-hand" class="btn btn-ghost" type="button" disabled aria-pressed="false">
+              Raise Hand
+            </button>
+            <button id="btn-reaction" class="btn btn-ghost" type="button" disabled aria-label="Send reaction">
+              ❤️ React
+            </button>
+            <button id="btn-record" class="btn btn-ghost" type="button" disabled aria-pressed="false">
+              Record locally
+            </button>
+            <button id="btn-calendar" class="btn btn-ghost" type="button" disabled>
+              Calendar invite
+            </button>
+            <button id="btn-mute-everyone" class="btn btn-ghost" type="button" disabled hidden>
+              Mute everyone
             </button>
             <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
           </div>
@@ -785,7 +803,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=15"></script>
+  <script type="module" src="js/app.js?v=16"></script>
 
 </body>
 </html>

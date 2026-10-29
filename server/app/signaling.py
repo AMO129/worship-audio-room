@@ -26,6 +26,7 @@ Message Protocol (server → client):
 import logging
 from datetime import datetime, timezone
 from typing import Dict
+from uuid import uuid4
 
 from fastapi import WebSocket
 
@@ -50,6 +51,10 @@ class ConnectionManager:
         self.waiting: Dict[str, Dict[str, tuple[WebSocket, str, str]]] = {}
         self.kicked_users: Dict[str, set[str]] = {}
         self.invalidated_rooms: set[str] = set()
+        self.raised_hands: Dict[str, set[str]] = {}
+        self.polls: Dict[str, Dict[str, dict]] = {}
+        self.questions: Dict[str, Dict[str, dict]] = {}
+        self.question_votes: Dict[str, Dict[str, set[str]]] = {}
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -89,10 +94,7 @@ class ConnectionManager:
 
         room = self.rooms.get(room_id)
         if room:
-            if user_id and user_id in self.kicked_users.get(room_id, set()):
-                await self._send(websocket, {"type": "peer-kicked"})
-                await websocket.close(code=4001, reason="Removed by host")
-                return
+            was_kicked = bool(user_id and user_id in self.kicked_users.get(room_id, set()))
             existing_id = next(
                 (peer_id for peer_id, peer_user in self.peer_users.get(room_id, {}).items()
                  if peer_user and peer_user == user_id),
@@ -118,7 +120,7 @@ class ConnectionManager:
                     "muted_peers": list(self.muted_peers.get(room_id, set())),
                 })
                 return
-            if existing_id:
+            if existing_id and not was_kicked:
                 room[existing_id] = websocket
                 self.peer_names.setdefault(room_id, {})[existing_id] = clean_name
                 await self._send(websocket, {
@@ -157,6 +159,10 @@ class ConnectionManager:
         self.room_hosts[room_id] = client_id
         self.room_host_users[room_id] = user_id
         muted_peers = self.muted_peers.setdefault(room_id, set())
+        self.raised_hands.setdefault(room_id, set())
+        self.polls.setdefault(room_id, {})
+        self.questions.setdefault(room_id, {})
+        self.question_votes.setdefault(room_id, {})
 
         # Register newcomer
         room[client_id] = websocket
@@ -258,6 +264,7 @@ class ConnectionManager:
         room[target_id] = target_ws
         names[target_id] = target_name
         self.peer_users.setdefault(room_id, {})[target_id] = target_user
+        self.kicked_users.get(room_id, set()).discard(target_user)
         await self._send(target_ws, {"type": "admitted"})
         await self._send(target_ws, {
             "type": "room-users",
@@ -325,6 +332,10 @@ class ConnectionManager:
             self.peer_names.pop(room_id, None)
             self.peer_users.pop(room_id, None)
             self.muted_peers.pop(room_id, None)
+            self.raised_hands.pop(room_id, None)
+            self.polls.pop(room_id, None)
+            self.questions.pop(room_id, None)
+            self.question_votes.pop(room_id, None)
             self.room_hosts.pop(room_id, None)
             self.room_host_users.pop(room_id, None)
             self.kicked_users.pop(room_id, None)
@@ -411,6 +422,183 @@ class ConnectionManager:
             await self._send(websocket, payload)
         return True
 
+    async def set_hand_raised(self, room_id: str, sender_id: str, raised: bool) -> bool:
+        """Validate and broadcast a participant's hand state."""
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room or not isinstance(raised, bool):
+            return False
+        hands = self.raised_hands.setdefault(room_id, set())
+        (hands.add if raised else hands.discard)(sender_id)
+        await self._broadcast(room, {
+            "type": "raise-hand",
+            "peer_id": sender_id,
+            "raised": raised,
+        })
+        return True
+
+    async def broadcast_reaction(self, room_id: str, sender_id: str, emoji: str) -> bool:
+        """Broadcast a bounded, non-empty emoji reaction."""
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room or not isinstance(emoji, str):
+            return False
+        emoji = emoji.strip()
+        if not emoji or len(emoji) > 16 or any(ord(char) < 32 for char in emoji):
+            return False
+        await self._broadcast(room, {
+            "type": "emoji-reaction",
+            "peer_id": sender_id,
+            "emoji": emoji,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
+        return True
+
+    async def mute_all(self, room_id: str, sender_id: str, muted: bool) -> bool:
+        """Apply host-only mute-all moderation and notify every participant."""
+        room = self.rooms.get(room_id, {})
+        if (
+            sender_id not in room
+            or self.room_hosts.get(room_id) != sender_id
+            or not isinstance(muted, bool)
+        ):
+            return False
+        targets = set(room) - {sender_id}
+        muted_peers = self.muted_peers.setdefault(room_id, set())
+        if muted:
+            muted_peers.update(targets)
+        else:
+            muted_peers.difference_update(targets)
+        await self._broadcast(room, {
+            "type": "mute-all",
+            "sender_id": sender_id,
+            "muted": muted,
+            "peer_ids": sorted(targets),
+        })
+        for target_id in targets:
+            await self._broadcast(room, {
+                "type": "participant-mute",
+                "peer_id": target_id,
+                "muted": muted,
+            })
+        return True
+
+    async def create_poll(
+        self, room_id: str, sender_id: str, poll_id: str, question: str, options: object
+    ) -> bool:
+        """Create a host-owned poll after validating its shape and size."""
+        room = self.rooms.get(room_id, {})
+        if (
+            sender_id not in room
+            or self.room_hosts.get(room_id) != sender_id
+            or not isinstance(poll_id, str)
+            or not isinstance(question, str)
+            or not isinstance(options, list)
+        ):
+            return False
+        poll_id, question = poll_id.strip()[:64], " ".join(question.split())[:240]
+        clean_options = [
+            " ".join(item.split())[:80] for item in options
+            if isinstance(item, str) and item.strip()
+        ]
+        if (
+            not poll_id or not question or not 2 <= len(clean_options) <= 10
+            or len(set(clean_options)) != len(clean_options)
+        ):
+            return False
+        polls = self.polls.setdefault(room_id, {})
+        if poll_id in polls:
+            return False
+        polls[poll_id] = {"question": question, "options": clean_options, "votes": {}}
+        await self._broadcast(room, {
+            "type": "poll-created", "poll_id": poll_id, "question": question,
+            "options": clean_options, "creator_id": sender_id,
+        })
+        return True
+
+    async def vote_poll(self, room_id: str, sender_id: str, poll_id: str, option_index: object) -> bool:
+        room = self.rooms.get(room_id, {})
+        poll = self.polls.get(room_id, {}).get(poll_id)
+        if (
+            sender_id not in room or not isinstance(poll_id, str)
+            or poll is None or not isinstance(option_index, int)
+            or isinstance(option_index, bool)
+            or not 0 <= option_index < len(poll["options"])
+            or sender_id in poll["votes"]
+        ):
+            return False
+        poll["votes"][sender_id] = option_index
+        await self._broadcast(room, {
+            "type": "poll-vote", "poll_id": poll_id,
+            "voter_id": sender_id, "option_index": option_index,
+        })
+        return True
+
+    async def close_poll(self, room_id: str, sender_id: str, poll_id: str) -> bool:
+        room = self.rooms.get(room_id, {})
+        if (
+            sender_id not in room or self.room_hosts.get(room_id) != sender_id
+            or not isinstance(poll_id, str)
+            or poll_id not in self.polls.get(room_id, {})
+        ):
+            return False
+        poll = self.polls[room_id].pop(poll_id)
+        await self._broadcast(room, {
+            "type": "poll-closed", "poll_id": poll_id,
+            "results": list(poll["votes"].values()), "closed_by": sender_id,
+        })
+        return True
+
+    async def submit_question(self, room_id: str, sender_id: str, text: str) -> bool:
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room or not isinstance(text, str):
+            return False
+        text = " ".join(text.split())[:500]
+        if not text:
+            return False
+        question_id = uuid4().hex
+        self.questions.setdefault(room_id, {})[question_id] = {
+            "text": text, "answered": False, "author_id": sender_id,
+        }
+        await self._broadcast(room, {
+            "type": "question-submitted", "question_id": question_id,
+            "text": text, "author_id": sender_id,
+        })
+        return True
+
+    async def answer_question(
+        self, room_id: str, sender_id: str, question_id: str, answered: bool
+    ) -> bool:
+        room = self.rooms.get(room_id, {})
+        question = (
+            self.questions.get(room_id, {}).get(question_id)
+            if isinstance(question_id, str) else None
+        )
+        if (
+            sender_id not in room or self.room_hosts.get(room_id) != sender_id
+            or question is None or not isinstance(answered, bool)
+        ):
+            return False
+        question["answered"] = answered
+        await self._broadcast(room, {
+            "type": "question-answered", "question_id": question_id,
+            "answered": answered, "answered_by": sender_id,
+        })
+        return True
+
+    async def broadcast_notification(
+        self, room_id: str, sender_id: str, title: str, body: str
+    ) -> bool:
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room or not isinstance(title, str) or not isinstance(body, str):
+            return False
+        title, body = " ".join(title.split())[:120], " ".join(body.split())[:500]
+        if not title or not body:
+            return False
+        await self._broadcast(room, {
+            "type": "browser-notification", "sender_id": sender_id,
+            "title": title, "body": body,
+        })
+        return True
+
     async def kick_peer(self, room_id: str, sender_id: str, target_id: str) -> bool:
         """Disconnect a participant when the current room host removes them."""
         room = self.rooms.get(room_id, {})
@@ -433,7 +621,7 @@ class ConnectionManager:
         room_id: str,
         sender_id: str,
         payload: dict,
-    ) -> None:
+    ) -> dict | None:
         """
         Attach `sender_id` and a UTC ISO-8601 `timestamp` to `payload`, then
         broadcast the resulting chat-message to every peer in the room
@@ -447,16 +635,20 @@ class ConnectionManager:
         """
         room = self.rooms.get(room_id, {})
         if sender_id not in room:
-            return
+            return None
+        text = " ".join(str(payload.get("text", "")).split())[:500]
+        if not text:
+            return None
         enriched = {
-            **payload,
             "type":      "chat-message",
             "sender_id": sender_id,
             "sender_name": self.peer_names.get(room_id, {}).get(sender_id, "Guest"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "text": text,
         }
         for ws in list(room.values()):
             await self._send(ws, enriched)
+        return enriched
 
     async def broadcast_screen_share_stopped(self, room_id: str, sender_id: str) -> None:
         room = self.rooms.get(room_id, {})
@@ -555,6 +747,11 @@ class ConnectionManager:
         return len(self.rooms)
 
     # ─── Internal ─────────────────────────────────────────────────────────────
+
+    @staticmethod
+    async def _broadcast(room: Dict[str, WebSocket], payload: dict) -> None:
+        for websocket in list(room.values()):
+            await ConnectionManager._send(websocket, payload)
 
     @staticmethod
     async def _send(websocket: WebSocket, payload: dict) -> None:

@@ -16,6 +16,7 @@ import hmac
 import logging
 from pathlib import Path
 import time
+from datetime import datetime
 from urllib.parse import urlparse
 
 from authlib.integrations.starlette_client import OAuth
@@ -31,6 +32,7 @@ from google.oauth2.id_token import verify_oauth2_token
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import settings
+from .persistence import Persistence
 from .signaling import manager
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+persistence = Persistence(settings.database_url)
 
 # ─── Application Factory ──────────────────────────────────────────────────────
 
@@ -310,12 +313,22 @@ async def websocket_endpoint(
         return
 
     display_name = str(user.get("name") or user.get("email") or "Participant")
+    if await persistence.is_invalidated(room_id):
+        await websocket.close(code=4004, reason="Meeting link is invalid")
+        return
     await manager.connect(websocket, room_id, client_id, display_name, str(user["sub"]))
+    if client_id in manager.rooms.get(room_id, {}):
+        await persistence.ensure_room(room_id, str(user["sub"]))
+        history = await persistence.recent_chat(room_id)
+        if history:
+            await websocket.send_json({"type": "chat-history", "messages": history})
     logger.info("WS open  — room='%s' client='%s'", room_id, client_id)
 
     try:
         while True:
             data = await websocket.receive_json()
+            if not isinstance(data, dict):
+                continue
             msg_type = data.get("type", "")
 
             # ── Keep-alive ────────────────────────────────────────────────────
@@ -342,11 +355,19 @@ async def websocket_endpoint(
 
             # ── Chat broadcast ────────────────────────────────────────────────
             if msg_type == "chat-message":
-                await manager.broadcast_chat(
+                enriched = await manager.broadcast_chat(
                     room_id=room_id,
                     sender_id=client_id,
                     payload=data,
                 )
+                if enriched:
+                    await persistence.save_chat(
+                        room_id,
+                        str(user["sub"]),
+                        enriched["sender_name"],
+                        enriched["text"],
+                        datetime.fromisoformat(enriched["timestamp"]),
+                    )
                 continue
 
             if msg_type == "set-display-name":
@@ -368,6 +389,74 @@ async def websocket_endpoint(
                 if isinstance(target_id, str) and isinstance(data.get("muted"), bool):
                     await manager.set_peer_muted(
                         room_id, client_id, target_id, data["muted"]
+                    )
+                continue
+
+            if msg_type == "mute-all":
+                if isinstance(data.get("muted"), bool):
+                    await manager.mute_all(room_id, client_id, data["muted"])
+                continue
+
+            if msg_type == "raise-hand":
+                if isinstance(data.get("raised"), bool):
+                    await manager.set_hand_raised(room_id, client_id, data["raised"])
+                continue
+
+            if msg_type == "emoji-reaction":
+                if isinstance(data.get("emoji"), str):
+                    await manager.broadcast_reaction(room_id, client_id, data["emoji"])
+                continue
+
+            if msg_type == "poll-create":
+                if (
+                    isinstance(data.get("poll_id"), str)
+                    and isinstance(data.get("question"), str)
+                    and isinstance(data.get("options"), list)
+                ):
+                    await manager.create_poll(
+                        room_id, client_id, data["poll_id"],
+                        data["question"], data["options"],
+                    )
+                continue
+
+            if msg_type == "poll-vote":
+                if (
+                    isinstance(data.get("poll_id"), str)
+                    and isinstance(data.get("option_index"), int)
+                    and not isinstance(data.get("option_index"), bool)
+                ):
+                    await manager.vote_poll(
+                        room_id, client_id, data["poll_id"], data["option_index"]
+                    )
+                continue
+
+            if msg_type == "poll-close":
+                if isinstance(data.get("poll_id"), str):
+                    await manager.close_poll(room_id, client_id, data["poll_id"])
+                continue
+
+            if msg_type in ("question-submit", "qa-question"):
+                if isinstance(data.get("text"), str):
+                    await manager.submit_question(room_id, client_id, data["text"])
+                continue
+
+            if msg_type in ("question-answer", "qa-answer"):
+                if (
+                    isinstance(data.get("question_id"), str)
+                    and isinstance(data.get("answered"), bool)
+                ):
+                    await manager.answer_question(
+                        room_id, client_id, data["question_id"], data["answered"]
+                    )
+                continue
+
+            if msg_type in ("browser-notification", "notification"):
+                if (
+                    isinstance(data.get("title"), str)
+                    and isinstance(data.get("body"), str)
+                ):
+                    await manager.broadcast_notification(
+                        room_id, client_id, data["title"], data["body"]
                     )
                 continue
 
@@ -415,6 +504,8 @@ async def websocket_endpoint(
         was_active_peer = await manager.disconnect(room_id, client_id, websocket)
         if was_active_peer:
             await manager.broadcast_peer_left(room_id, client_id)
+            if room_id in manager.invalidated_rooms:
+                await persistence.invalidate_room(room_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

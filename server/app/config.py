@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
 
+    # Optional PostgreSQL persistence for room tombstones and chat history.
+    database_url: str | None = None
+
     # TURN REST credentials (coturn-compatible shared-secret mode)
     turn_urls: str = ""
     turn_shared_secret: str | None = None
