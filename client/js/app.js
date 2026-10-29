@@ -671,6 +671,8 @@ function updateProfileBadge() {
  * Checks existing server-side session or sessionStorage for a prior login.
  */
 async function refreshAuthentication() {
+  const authResult = new URLSearchParams(window.location.search).get('auth');
+
   // 1. Check sessionStorage first (GIS / dev login)
   const stored = getUserSession();
   if (stored) {
@@ -723,6 +725,23 @@ async function refreshAuthentication() {
   authenticatedUser = null;
   if ($authOverlay) $authOverlay.hidden = false;
   lockRoomControls();
+
+  if (authResult === 'success') {
+    showAlert(
+      'Google sign-in completed, but this browser did not receive the app session. Check that cookies are enabled, then try again.',
+      'error',
+    );
+  } else if (authResult === 'error') {
+    showAlert(
+      'Google sign-in could not be completed. Please try again; if it continues, check the Render service logs.',
+      'error',
+    );
+  }
+
+  if (authResult) {
+    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
 }
 
 function bindAuthentication() {

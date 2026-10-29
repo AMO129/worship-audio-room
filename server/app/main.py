@@ -19,6 +19,7 @@ import time
 from urllib.parse import urlparse
 
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.base_client.errors import OAuthError
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -105,7 +106,9 @@ async def health_check() -> JSONResponse:
 
 @app.get("/auth/me", tags=["auth"])
 async def current_user(request: Request) -> JSONResponse:
-    return JSONResponse({"user": request.session.get("user")})
+    response = JSONResponse({"user": request.session.get("user")})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.get("/api/auth/config", tags=["auth"], summary="Return public authentication configuration")
@@ -190,10 +193,15 @@ async def google_callback(request: Request):
     if not settings.google_client_id or not settings.google_client_secret:
         raise HTTPException(status_code=503, detail="Google sign-in is not configured.")
 
-    token = await oauth.google.authorize_access_token(request)
-    profile = token.get("userinfo")
-    if profile is None:
-        profile = await oauth.google.parse_id_token(request, token)
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        profile = token.get("userinfo")
+        if profile is None:
+            profile = await oauth.google.parse_id_token(request, token)
+    except (OAuthError, ValueError, KeyError, TypeError):
+        logger.exception("Google OAuth callback failed")
+        return RedirectResponse("/?auth=error")
+
     subject = profile.get("sub")
     if not subject:
         raise HTTPException(status_code=401, detail="Google did not return a verified account.")
@@ -207,7 +215,9 @@ async def google_callback(request: Request):
         "picture": str(profile.get("picture") or "")[:2048],
     }
     next_path = request.session.pop("auth_next", "/")
-    return RedirectResponse(next_path if next_path.startswith("/") and not next_path.startswith("//") else "/")
+    destination = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
+    separator = "&" if "?" in destination else "?"
+    return RedirectResponse(f"{destination}{separator}auth=success")
 
 
 @app.post("/auth/logout", tags=["auth"])
