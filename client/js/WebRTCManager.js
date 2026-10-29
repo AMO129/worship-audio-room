@@ -55,6 +55,7 @@ export class WebRTCManager {
     this.onWaitingRoom   = null;   // () => void
     this.onWaitingPeersChange = null; // (waitingPeers) => void
     this.onAdmissionDenied = null; // () => void
+    this.onRoomClosed = null; // (message) => void
     this.onRoomJoined   = null;   // () => void
     this.onPeerConnectionState = null; // (peerId, state) => void
     this.onScreenShareStarted = null; // (stream) => void
@@ -333,6 +334,12 @@ export class WebRTCManager {
       case 'admission-denied':
         this._isAdmitted = false;
         this.onAdmissionDenied?.();
+        break;
+      case 'room-closed':
+        this._isAdmitted = false;
+        this._shouldReconnect = false;
+        this._settleJoin?.(new Error(msg.message || 'This room is closed to new guests.'));
+        this.onRoomClosed?.(msg.message || 'This room is closed to new guests.');
         break;
       case 'room-users':    this._onRoomUsers(msg);        break;
       case 'peer-joined':   this._onPeerJoined(msg);       break;

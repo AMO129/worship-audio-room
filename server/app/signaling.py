@@ -49,6 +49,7 @@ class ConnectionManager:
         self.room_host_users: Dict[str, str] = {}
         self.waiting: Dict[str, Dict[str, tuple[WebSocket, str, str]]] = {}
         self.kicked_users: Dict[str, set[str]] = {}
+        self.closed_to_new_guests: set[str] = set()
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ class ConnectionManager:
                 and user_id == self.room_host_users.get(room_id)
                 and not existing_id
             ):
+                self.closed_to_new_guests.discard(room_id)
                 room[client_id] = websocket
                 self.peer_names.setdefault(room_id, {})[client_id] = clean_name
                 self.peer_users.setdefault(room_id, {})[client_id] = user_id
@@ -123,6 +125,13 @@ class ConnectionManager:
                     "muted_peers": list(self.muted_peers.get(room_id, set())),
                 })
                 return
+            if room_id in self.closed_to_new_guests:
+                await self._send(websocket, {
+                    "type": "room-closed",
+                    "message": "This room is no longer accepting new guests.",
+                })
+                await websocket.close(code=4004, reason="Room is closed to new guests")
+                return
             waiting = self.waiting.setdefault(room_id, {})
             waiting[client_id] = (websocket, clean_name, user_id)
             await self._send(websocket, {"type": "waiting-room"})
@@ -140,6 +149,7 @@ class ConnectionManager:
         users = self.peer_users.setdefault(room_id, {})
         self.room_hosts[room_id] = client_id
         self.room_host_users[room_id] = user_id
+        self.closed_to_new_guests.discard(room_id)
         muted_peers = self.muted_peers.setdefault(room_id, set())
 
         # Register newcomer
@@ -295,6 +305,7 @@ class ConnectionManager:
             return False
 
         departing_user = self.peer_users.get(room_id, {}).get(client_id, "")
+        was_host = self.room_hosts.get(room_id) == client_id
         room.pop(client_id, None)
         names = self.peer_names.get(room_id, {})
         names.pop(client_id, None)
@@ -309,11 +320,23 @@ class ConnectionManager:
             self.room_hosts.pop(room_id, None)
             self.room_host_users.pop(room_id, None)
             self.kicked_users.pop(room_id, None)
+            self.closed_to_new_guests.discard(room_id)
             logger.info("Room '%s' is empty — removed.", room_id)
         else:
-            if self.room_hosts.get(room_id) == client_id:
+            if was_host:
+                self.closed_to_new_guests.add(room_id)
                 self.room_host_users[room_id] = departing_user
                 self.room_hosts[room_id] = next(iter(room))
+                waiting = self.waiting.pop(room_id, {})
+                for waiting_ws, _, _ in waiting.values():
+                    await self._send(waiting_ws, {
+                        "type": "room-closed",
+                        "message": "The host left before you were admitted.",
+                    })
+                    try:
+                        await waiting_ws.close(code=4004, reason="Host left the room")
+                    except Exception as exc:
+                        logger.warning("Could not close waiting peer: %s", exc)
 
         logger.info("Peer %s left room '%s'.", client_id, room_id)
         return True
@@ -348,7 +371,7 @@ class ConnectionManager:
             await self._send(ws, payload)
 
         new_host = self.room_hosts.get(room_id)
-        if new_host and new_host != client_id:
+        if new_host and new_host != client_id and room_id not in self.closed_to_new_guests:
             host_socket = room.get(new_host)
             if host_socket:
                 for waiting_id, (_, waiting_name, _) in self.waiting.get(room_id, {}).items():

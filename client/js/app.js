@@ -407,6 +407,9 @@ async function bootstrap() {
     showAlert('The host did not admit you to this room.', 'warn');
     handleLeaveRoom();
   };
+  webrtcClient.onRoomClosed = (message) => {
+    showAlert(message, 'warn');
+  };
   webrtcClient.onKicked       = () => {
     showAlert('The host removed you from this room.', 'warn');
     handleLeaveRoom();
@@ -1720,7 +1723,12 @@ async function handleJoinRoom() {
   } catch (err) {
     console.error('[app] Join room failed:', err);
     webrtcClient.leave();
-    showAlert(`Could not connect to room "${roomId}". Is the server running?`, 'error');
+    const roomClosed = err?.message === 'This room is no longer accepting new guests.'
+      || err?.message === 'The host left before you were admitted.';
+    showAlert(
+      roomClosed ? err.message : `Could not connect to room "${roomId}". Is the server running?`,
+      roomClosed ? 'warn' : 'error',
+    );
 
     // Re-enable controls so the user can retry
     $btnJoin.disabled = false;
