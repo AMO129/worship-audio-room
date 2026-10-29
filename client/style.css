@@ -436,6 +436,8 @@ body {
 
 .peer-card--muted { border-color: var(--amber); }
 .peer-card--muted .peer-mic-icon { color: var(--amber); }
+.peer-card--reconnecting { border-color: var(--amber); }
+.peer-card--connection-failed { border-color: var(--crimson); }
 
 .peer-moderation-controls {
   display: flex;
@@ -465,6 +467,59 @@ body {
   opacity: 0.4;
   justify-content: center;
 }
+
+.stage-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.screen-share-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: var(--sp-3);
+}
+
+.screen-share-grid[hidden] { display: none; }
+
+.screen-share-tile {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  background: #080b10;
+}
+
+.screen-share-label {
+  overflow: hidden;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.screen-share-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #080b10;
+  object-fit: contain;
+}
+
+.captions-panel {
+  margin: 0 0 1rem;
+  padding: .75rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: .75rem;
+  background: rgba(15, 23, 42, .72);
+}
+.captions-heading { color: var(--text-muted); font-size: .75rem; margin-bottom: .35rem; }
+.captions-feed { display: grid; gap: .3rem; max-height: 7rem; overflow: auto; }
+.caption-line { color: var(--text-primary); font-size: .9rem; }
+.caption-line strong { color: var(--cyan); margin-right: .4rem; }
 
 .peer-card.speaking {
   border-color: var(--emerald);
@@ -1764,6 +1819,76 @@ body {
   cursor: not-allowed;
 }
 
+.btn[hidden],
+.account-label[hidden],
+.waiting-room-status[hidden],
+.admission-panel[hidden] { display: none; }
+
+.account-label {
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-label:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.waiting-room-status,
+.admission-panel {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  background: var(--bg-deck);
+}
+
+.waiting-room-status {
+  color: var(--amber);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.admission-panel-heading {
+  margin-bottom: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admission-list { display: grid; gap: var(--sp-2); }
+
+.admission-request {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.admission-request-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admission-request-actions { display: flex; gap: var(--sp-2); }
+.admission-request-actions .btn { height: 30px; padding: 0 var(--sp-2); font-size: 0.7rem; }
+
+.status-waiting {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: rgba(245,158,11,0.25);
+}
+
 .stage-grid--chat-hidden { grid-template-columns: minmax(0, 1fr) 440px; }
 
 @media (max-width: 1200px) {
@@ -1772,4 +1897,128 @@ body {
 
 @media (max-width: 768px) {
   .stage-grid--chat-hidden { grid-template-columns: minmax(0, 1fr); }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   GOOGLE AUTH OVERLAY
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 15, 25, 0.92);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  animation: authFadeIn 0.3s ease;
+}
+
+.auth-overlay[hidden] { display: none; }
+
+@keyframes authFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.auth-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-5);
+  width: 380px;
+  max-width: 90vw;
+  padding: var(--sp-10) var(--sp-8);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg), 0 0 80px rgba(56,189,248,0.06);
+  text-align: center;
+}
+
+.auth-overlay-brand {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--blue-dim);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  filter: drop-shadow(0 0 16px var(--blue-glow));
+}
+
+.auth-overlay-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.auth-overlay-subtitle {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 280px;
+}
+
+.auth-google-btn-wrap {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-dev-btn {
+  margin-top: var(--sp-2);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.auth-dev-btn:hover:not(:disabled) {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+/* ── Locked Room Controls ─────────────────────────────────────────────────── */
+.room-controls.auth-locked .room-input-group,
+.room-controls.auth-locked #btn-join {
+  opacity: 0.35;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+
+/* ── User Profile Badge (Header) ──────────────────────────────────────────── */
+.user-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px var(--sp-3) 3px 3px;
+  background: var(--bg-deck);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-full);
+  flex-shrink: 0;
+  transition: all var(--t-fast);
+}
+
+.user-profile-badge[hidden] { display: none; }
+
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--blue-glow);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+}
+
+.btn-sign-out {
+  height: 26px;
+  padding: 0 var(--sp-3);
+  font-size: 0.6875rem;
+  border-radius: var(--r-full);
 }

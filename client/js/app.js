@@ -14,11 +14,18 @@
  */
 
 import { AudioManager, EngineState } from './AudioManager.js?v=3';
-import { WebRTCManager }              from './WebRTCManager.js?v=6';
+import { WebRTCManager }              from './WebRTCManager.js?v=11';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Google OAuth Client ID.
+ * Replace with your real Client ID from https://console.cloud.google.com/
+ * When the placeholder value is detected on localhost, a Dev Login button is shown.
+ */
+let googleClientId = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
 
 /**
  * VU meter formula: maps dBFS range [-60, 0] → percentage [0, 100].
@@ -141,6 +148,7 @@ let customPlaylist = [];
  * @type {Map<string, HTMLElement>}
  */
 const peerElements = new Map();
+const peerConnectionStates = new Map();
 
 /**
  * ID of the currently active (playing) track, or null if none.
@@ -154,6 +162,13 @@ let activeTrackId = null;
  * @type {string|null}
  */
 let currentRoomId = null;
+let authenticatedUser = null;
+
+/**
+ * Stores the ?room= param value so we can auto-join after sign-in completes.
+ * @type {string|null}
+ */
+let pendingRoomId = null;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DOM ELEMENT REFERENCES
@@ -242,6 +257,28 @@ const $chatSidebar    = document.getElementById('chat-sidebar');
 const $stageGrid      = document.querySelector('.stage-grid');
 const $localPeerName  = document.getElementById('local-peer-name');
 const $localPeerRole  = document.getElementById('local-peer-role');
+const $btnSignIn      = document.getElementById('btn-sign-in');
+const $btnSignOut     = document.getElementById('btn-sign-out');
+const $accountLabel   = document.getElementById('account-label');
+const $waitingRoomStatus = document.getElementById('waiting-room-status');
+const $admissionPanel = document.getElementById('admission-panel');
+const $admissionList  = document.getElementById('admission-list');
+const $btnShareScreen = document.getElementById('btn-share-screen');
+const $btnStopScreenShare = document.getElementById('btn-stop-screen-share');
+const $btnToggleCaptions = document.getElementById('btn-toggle-captions');
+const $screenShareGrid = document.getElementById('screen-share-grid');
+const $captionsPanel = document.getElementById('captions-panel');
+const $captionsFeed = document.getElementById('captions-feed');
+let captionRecognition = null;
+let captionsActive = false;
+
+// -- Auth Overlay --
+const $authOverlay      = document.getElementById('auth-overlay');
+const $googleSigninBtn  = document.getElementById('google-signin-btn');
+const $devLoginBtn      = document.getElementById('dev-login-btn');
+const $userProfileBadge = document.getElementById('user-profile-badge');
+const $userAvatar       = document.getElementById('user-avatar');
+const $roomControls     = document.querySelector('.room-controls');
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // BOOTSTRAP
@@ -250,12 +287,14 @@ const $localPeerRole  = document.getElementById('local-peer-role');
 /**
  * Reads the `?room=` query param from the URL and pre-fills the Room ID input.
  * Called at the very start of bootstrap so the field is set before any binding.
+ * Also stashes the room ID for post-login auto-join.
  */
 function applyDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const roomParam = params.get('room');
   if (roomParam && $roomIdInput) {
     $roomIdInput.value = roomParam;
+    pendingRoomId = roomParam;
     return true;
   }
   return false;
@@ -308,17 +347,44 @@ function updatePlayPauseUI() {
 /**
  * Main application entry point. Called once on DOMContentLoaded.
  */
-function bootstrap() {
-  const shouldAutoJoin = applyDeepLink();
+async function bootstrap() {
+  const hasDeepLink = applyDeepLink();
 
   // Wire AudioManager state callbacks
   audioManager.onTransition = handleFSMTransition;
 
   // Wire WebRTCClient callbacks
   webrtcClient.onPeerJoined   = addPeerCard;
+  webrtcClient.onPeerRenamed  = updatePeerDisplayName;
+  webrtcClient.onCaption = renderCaption;
   webrtcClient.onPeerLeft     = removePeerCard;
   webrtcClient.onHostChange   = updateHostControls;
   webrtcClient.onPeerMuted    = (peerId) => updatePeerModerationControls(peerId);
+  webrtcClient.onPeerConnectionState = updatePeerConnectionState;
+  webrtcClient.onRoomJoined   = completeRoomJoin;
+  webrtcClient.onScreenShareStarted = (stream) => {
+    renderScreenShareTile(webrtcClient.clientId, stream, `${webrtcClient.userName} · You`, true);
+    $btnShareScreen.hidden = true;
+    $btnStopScreenShare.hidden = false;
+  };
+  webrtcClient.onScreenShareStopped = () => {
+    removeScreenShareTile(webrtcClient.clientId);
+    $btnShareScreen.hidden = false;
+    $btnStopScreenShare.hidden = true;
+  };
+  webrtcClient.onRemoteScreenShare = (peerId, stream) => {
+    renderScreenShareTile(peerId, stream, webrtcClient.getPeerName(peerId), false);
+  };
+  webrtcClient.onRemoteScreenShareStopped = removeScreenShareTile;
+  webrtcClient.onWaitingRoom  = () => {
+    $waitingRoomStatus.hidden = false;
+    $roomModeDisplay.textContent = 'Waiting';
+  };
+  webrtcClient.onWaitingPeersChange = renderAdmissionQueue;
+  webrtcClient.onAdmissionDenied = () => {
+    showAlert('The host did not admit you to this room.', 'warn');
+    handleLeaveRoom();
+  };
   webrtcClient.onKicked       = () => {
     showAlert('The host removed you from this room.', 'warn');
     handleLeaveRoom();
@@ -327,7 +393,9 @@ function bootstrap() {
     // 'connected' and 'live' both map to the 'live' badge style
     const badgeStatus = (status === 'connected' || status === 'live')
       ? 'live'
-      : 'disconnected';
+      : status === 'waiting' || status === 'connecting'
+        ? 'waiting'
+        : 'disconnected';
     const displayMsg = status === 'connected'
       ? `Live · Connected to Room: ${currentRoomId ?? $roomIdInput.value}`
       : msg;
@@ -343,6 +411,8 @@ function bootstrap() {
   bindFactoryPresets();
   bindCustomPlaylist();
   bindRoomControls();
+  bindScreenShare();
+  bindCaptions();
   bindChatVisibility();
   bindCopyLink();
   bindChat();
@@ -353,9 +423,312 @@ function bootstrap() {
   updateVuMeter(-Infinity);
   updateFooterMetrics();
 
-  if (shouldAutoJoin) handleJoinRoom();
+  // Lock room controls until auth completes
+  lockRoomControls();
+
+  // Check for existing session first (server-side OAuth or prior GIS login)
+  await refreshAuthentication();
+
+  // Initialise Google Identity Services
+  await initGoogleSignIn();
+
+  // Bind sign-out
+  bindAuthentication();
 
   console.log('[app] Bootstrap complete.');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GOOGLE SIGN-IN  (Google Identity Services — client-side credential flow)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Whether the configured Google client ID is usable.
+ */
+function isRealClientId() {
+  return googleClientId && !googleClientId.startsWith('YOUR_');
+}
+
+/**
+ * Initialises the Google Identity Services (GIS) library.
+ * Renders the branded sign-in button into the auth overlay.
+ * On localhost with a placeholder Client ID, shows a "Dev Login" fallback instead.
+ */
+async function initGoogleSignIn() {
+  const isLocalhost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(location.hostname);
+
+  // If already authenticated (session cookie / sessionStorage), skip overlay
+  if (authenticatedUser?.sub || getUserSession()) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/auth/config', { credentials: 'same-origin' });
+    if (response.ok) {
+      const config = await response.json();
+      if (typeof config.google_client_id === 'string' && config.google_client_id) {
+        googleClientId = config.google_client_id;
+      }
+    }
+  } catch (err) {
+    console.warn('[app] Could not load authentication configuration:', err);
+  }
+
+  if (isRealClientId() && typeof google !== 'undefined' && google.accounts?.id) {
+    google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback:  handleCredentialResponse,
+      auto_select: true,
+      cancel_on_tap_outside: false,
+    });
+
+    google.accounts.id.renderButton($googleSigninBtn, {
+      type:  'standard',
+      theme: 'filled_blue',
+      size:  'large',
+      shape: 'pill',
+      text:  'signin_with',
+      width: 280,
+    });
+
+    // Also prompt One Tap
+    google.accounts.id.prompt();
+  } else if (isLocalhost) {
+    // Dev/Test fallback for localhost without a real Client ID
+    if ($devLoginBtn) {
+      $devLoginBtn.hidden = false;
+      $devLoginBtn.addEventListener('click', handleDevLogin);
+    }
+    // Hide the GIS button container since it won't render anything
+    if ($googleSigninBtn) $googleSigninBtn.style.display = 'none';
+  }
+}
+
+/**
+ * Called by GIS when the user completes Google Sign-In.
+ * The `response.credential` contains a JWT ID token.
+ */
+async function handleCredentialResponse(response) {
+  const idToken = response.credential;
+
+  try {
+    // Try server-side verification first
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: idToken }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const user = {
+        sub:     data.sub || data.email,
+        name:    data.name || 'Participant',
+        email:   data.email || '',
+        picture: data.picture || '',
+        token:   idToken,
+      };
+      saveUserSession(user);
+      authenticatedUser = user;
+      onAuthSuccess();
+      return;
+    }
+  } catch (err) {
+    console.warn('[app] Server auth/google call failed, falling back to JWT decode:', err);
+  }
+
+  showAlert('Sign-in failed. Please try again.', 'error');
+}
+
+/**
+ * Dev/Test login — creates a fake user session for localhost testing.
+ */
+function handleDevLogin() {
+  const user = {
+    sub:     'dev-user-localhost',
+    name:    'Dev Tester',
+    email:   'dev@localhost',
+    picture: '',
+    token:   'dev-token',
+  };
+  saveUserSession(user);
+  authenticatedUser = user;
+  onAuthSuccess();
+}
+
+/**
+ * Called after successful authentication (Google or Dev).
+ * Hides the auth overlay, shows profile badge, unlocks room controls,
+ * and auto-joins a pending room if one was in the URL.
+ */
+function onAuthSuccess() {
+  // Hide overlay
+  if ($authOverlay) $authOverlay.hidden = true;
+
+  // Update header UI
+  updateProfileBadge();
+  unlockRoomControls();
+
+  // Auto-populate chat display name
+  if ($chatUsername && authenticatedUser?.name) {
+    $chatUsername.value = authenticatedUser.name;
+  }
+
+  // Auto-join pending room from ?room= deep link
+  if (pendingRoomId) {
+    const roomToJoin = pendingRoomId;
+    pendingRoomId = null;
+    $roomIdInput.value = roomToJoin;
+    handleJoinRoom();
+  }
+}
+
+/**
+ * Saves the user session to sessionStorage.
+ */
+function saveUserSession(user) {
+  sessionStorage.setItem('worship_user', JSON.stringify(user));
+}
+
+/**
+ * Retrieves the user session from sessionStorage, or null.
+ */
+function getUserSession() {
+  try {
+    const data = sessionStorage.getItem('worship_user');
+    if (!data) return null;
+    const user = JSON.parse(data);
+    return user?.sub ? user : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clears the user session from sessionStorage.
+ */
+function clearUserSession() {
+  sessionStorage.removeItem('worship_user');
+}
+
+/**
+ * Locks room creation/join controls (shown before authentication).
+ */
+function lockRoomControls() {
+  $roomControls?.classList.add('auth-locked');
+}
+
+/**
+ * Unlocks room creation/join controls (shown after authentication).
+ */
+function unlockRoomControls() {
+  $roomControls?.classList.remove('auth-locked');
+}
+
+/**
+ * Updates the header profile badge with the authenticated user's info.
+ */
+function updateProfileBadge() {
+  const isSignedIn = Boolean(authenticatedUser?.sub);
+
+  // Hide the old sign-in link
+  if ($btnSignIn) $btnSignIn.hidden = true;
+
+  if (isSignedIn && $userProfileBadge) {
+    $userProfileBadge.hidden = false;
+    if ($userAvatar) {
+      if (authenticatedUser.picture) {
+        $userAvatar.src = authenticatedUser.picture;
+        $userAvatar.style.display = '';
+      } else {
+        $userAvatar.style.display = 'none';
+      }
+    }
+    if ($accountLabel) {
+      $accountLabel.textContent = authenticatedUser.name || authenticatedUser.email || 'Signed in';
+    }
+  } else if ($userProfileBadge) {
+    $userProfileBadge.hidden = true;
+  }
+}
+
+/**
+ * Checks existing server-side session or sessionStorage for a prior login.
+ */
+async function refreshAuthentication() {
+  // 1. Check sessionStorage first (GIS / dev login)
+  const stored = getUserSession();
+  if (stored) {
+    authenticatedUser = stored;
+    if ($authOverlay) $authOverlay.hidden = true;
+    updateProfileBadge();
+    unlockRoomControls();
+    if ($chatUsername && authenticatedUser.name) {
+      $chatUsername.value = authenticatedUser.name;
+    }
+    // Auto-join pending room
+    if (pendingRoomId) {
+      const roomToJoin = pendingRoomId;
+      pendingRoomId = null;
+      $roomIdInput.value = roomToJoin;
+      // Defer join to after all bindings complete
+      setTimeout(() => handleJoinRoom(), 0);
+    }
+    return;
+  }
+
+  // 2. Check server-side session (Authlib OAuth redirect flow)
+  try {
+    const response = await fetch('/auth/me', { credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`Auth status request failed: ${response.status}`);
+    const data = await response.json();
+    if (data.user?.sub) {
+      authenticatedUser = data.user;
+      saveUserSession(authenticatedUser);
+      if ($authOverlay) $authOverlay.hidden = true;
+      updateProfileBadge();
+      unlockRoomControls();
+      if ($chatUsername) {
+        $chatUsername.value = authenticatedUser.name || authenticatedUser.email || 'Participant';
+      }
+      // Auto-join pending room
+      if (pendingRoomId) {
+        const roomToJoin = pendingRoomId;
+        pendingRoomId = null;
+        $roomIdInput.value = roomToJoin;
+        setTimeout(() => handleJoinRoom(), 0);
+      }
+      return;
+    }
+  } catch (error) {
+    console.warn('[app] Could not read authentication state:', error);
+  }
+
+  // Not authenticated — show the overlay
+  authenticatedUser = null;
+  if ($authOverlay) $authOverlay.hidden = false;
+  lockRoomControls();
+}
+
+function bindAuthentication() {
+  $btnSignOut?.addEventListener('click', async () => {
+    // Clear client-side session
+    clearUserSession();
+    authenticatedUser = null;
+
+    // Revoke GIS credential if available
+    if (isRealClientId() && typeof google !== 'undefined' && google.accounts?.id) {
+      google.accounts.id.disableAutoSelect();
+    }
+
+    // Clear server-side session too
+    try {
+      await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch { /* ignore */ }
+
+    // Reload page to reset all state
+    window.location.assign('/');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1078,6 +1451,130 @@ function bindChatVisibility() {
   });
 }
 
+function bindScreenShare() {
+  $btnShareScreen?.addEventListener('click', async () => {
+    $btnShareScreen.disabled = true;
+    try {
+      await webrtcClient.startScreenShare();
+    } catch (error) {
+      console.warn('[app] Screen sharing could not start:', error);
+      if (error.name !== 'NotAllowedError') {
+        showAlert('Could not start screen sharing. Check browser permissions and try again.', 'warn');
+      }
+
+      function bindCaptions() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          $btnToggleCaptions.title = 'Captions are not supported by this browser';
+          return;
+        }
+        $btnToggleCaptions.disabled = false;
+        $btnToggleCaptions.addEventListener('click', () => {
+          if (captionsActive) {
+            stopCaptions();
+          } else {
+            startCaptions(SpeechRecognition);
+          }
+        });
+      }
+
+      function startCaptions(SpeechRecognition) {
+        captionRecognition = new SpeechRecognition();
+        captionRecognition.continuous = true;
+        captionRecognition.interimResults = true;
+        captionRecognition.lang = navigator.language || 'en-US';
+        captionRecognition.onresult = (event) => {
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            const text = result[0]?.transcript?.trim();
+            if (text) webrtcClient.sendCaption(text, result.isFinal);
+          }
+        };
+        captionRecognition.onerror = (event) => {
+          if (event.error !== 'no-speech') {
+            showAlert(`Captions stopped: ${event.error}.`, 'warn');
+            stopCaptions();
+          }
+        };
+        captionRecognition.onend = () => {
+          if (captionsActive) {
+            try { captionRecognition.start(); } catch (_) { /* browser is already restarting */ }
+          }
+        };
+        try {
+          captionRecognition.start();
+          captionsActive = true;
+          $btnToggleCaptions.textContent = 'Stop Captions';
+          $btnToggleCaptions.setAttribute('aria-pressed', 'true');
+          $captionsPanel.hidden = false;
+        } catch (error) {
+          showAlert('Could not start captions. Check microphone permission.', 'warn');
+        }
+      }
+
+      function stopCaptions() {
+        captionsActive = false;
+        captionRecognition?.stop();
+        captionRecognition = null;
+        $btnToggleCaptions.textContent = 'Start Captions';
+        $btnToggleCaptions.setAttribute('aria-pressed', 'false');
+      }
+
+      function renderCaption(message) {
+        if (!message?.text) return;
+        $captionsPanel.hidden = false;
+        const line = document.createElement('div');
+        line.className = 'caption-line';
+        const speaker = document.createElement('strong');
+        speaker.textContent = message.speaker_name || 'Participant';
+        line.append(speaker, document.createTextNode(message.text));
+        $captionsFeed.appendChild(line);
+        while ($captionsFeed.children.length > 30) $captionsFeed.firstElementChild.remove();
+        $captionsFeed.scrollTop = $captionsFeed.scrollHeight;
+      }
+    } finally {
+      $btnShareScreen.disabled = false;
+    }
+  });
+  $btnStopScreenShare?.addEventListener('click', () => webrtcClient.stopScreenShare());
+}
+
+function renderScreenShareTile(peerId, stream, displayName, isLocal) {
+  removeScreenShareTile(peerId);
+  const tile = document.createElement('div');
+  tile.className = 'screen-share-tile';
+  tile.dataset.screenPeerId = peerId;
+
+  const label = document.createElement('div');
+  label.className = 'screen-share-label';
+  label.textContent = `${displayName} is sharing`;
+
+  const video = document.createElement('video');
+  video.className = 'screen-share-video';
+  video.autoplay = true;
+  video.playsInline = true;
+  video.muted = isLocal;
+  video.srcObject = stream;
+  video.play().catch((error) => console.warn('[app] Screen playback was blocked:', error));
+
+  tile.append(label, video);
+  $screenShareGrid.appendChild(tile);
+  $screenShareGrid.hidden = false;
+}
+
+function removeScreenShareTile(peerId) {
+  const tile = [...$screenShareGrid.children].find((item) => item.dataset.screenPeerId === peerId);
+  if (tile) {
+    const video = tile.querySelector('video');
+    if (video) {
+      video.pause();
+      video.srcObject = null;
+    }
+    tile.remove();
+  }
+  $screenShareGrid.hidden = $screenShareGrid.childElementCount === 0;
+}
+
 /**
  * Handles the "Join Room" action.
  * Validates the Room ID, opens the WebSocket signaling channel,
@@ -1085,6 +1582,19 @@ function bindChatVisibility() {
  */
 async function handleJoinRoom() {
   const roomId = $roomIdInput.value.trim().toLowerCase().replace(/\s+/g, '-');
+
+  // Block if no valid user session exists
+  if (!authenticatedUser?.sub && !getUserSession()) {
+    pendingRoomId = roomId || null;
+    showAlert('Please sign in with Google before joining a room.', 'warn');
+    if ($authOverlay) $authOverlay.hidden = false;
+    return;
+  }
+
+  // Ensure authenticatedUser is populated from sessionStorage if needed
+  if (!authenticatedUser?.sub) {
+    authenticatedUser = getUserSession();
+  }
 
   if (!roomId) {
     showAlert('Please enter a Room ID before joining.', 'warn');
@@ -1105,8 +1615,9 @@ async function handleJoinRoom() {
   try {
     // Pass the live AudioManager stream (if available) so WebRTCManager can
     // attach it immediately to any peer connections it creates.
-    const userName = $chatUsername?.value?.trim() || 'Host';
-    await webrtcClient.join(roomId, audioManager, userName);
+    const userName = ($chatUsername?.value || authenticatedUser.name || authenticatedUser.email || 'Participant').trim();
+    if ($chatUsername) $chatUsername.value = userName;
+    const joinState = await webrtcClient.join(roomId, audioManager, userName);
 
     currentRoomId = roomId;
     updateHostControls();
@@ -1116,19 +1627,17 @@ async function handleJoinRoom() {
     roomUrl.searchParams.set('room', roomId);
     window.history.pushState({}, '', `${roomUrl.pathname}${roomUrl.search}${roomUrl.hash}`);
 
-    // Enable copy link button
-    if ($btnCopyLink) $btnCopyLink.disabled = false;
-
-    // Enable chat
-    if ($chatInput)   $chatInput.disabled   = false;
-    if ($btnChatSend) $btnChatSend.disabled = false;
-    if ($btnEmojiPicker) $btnEmojiPicker.disabled = false;
-
-    // Update stage info
-    $roomModeDisplay.textContent = 'Live';
-    $signalQuality.textContent   = 'Excellent';
-    $signalQuality.className     = 'stage-info-value stage-info-value--good';
     $btnLeave.disabled = false;
+
+    if (joinState === 'waiting') {
+      $waitingRoomStatus.hidden = false;
+      $roomModeDisplay.textContent = 'Waiting';
+      $btnCopyLink.disabled = true;
+      setConnectionStatus('waiting', 'Waiting for host approval');
+      return;
+    }
+
+    completeRoomJoin();
 
     console.log(`[app] Joined room: ${roomId}`);
   } catch (err) {
@@ -1143,12 +1652,75 @@ async function handleJoinRoom() {
   }
 }
 
+function completeRoomJoin() {
+  if (!currentRoomId || !webrtcClient.isActiveParticipant) return;
+  $waitingRoomStatus.hidden = true;
+  $btnLeave.disabled = false;
+  $btnCopyLink.disabled = false;
+  $chatInput.disabled = false;
+  $btnChatSend.disabled = false;
+  $btnEmojiPicker.disabled = false;
+  $btnShareScreen.disabled = false;
+  $btnToggleCaptions.disabled = false;
+  $roomModeDisplay.textContent = 'Live';
+  $signalQuality.textContent = 'Excellent';
+  $signalQuality.className = 'stage-info-value stage-info-value--good';
+  updateHostControls();
+  setConnectionStatus('live', `Live · Connected to Room: ${currentRoomId}`);
+}
+
+function renderAdmissionQueue(waitingPeers = webrtcClient.waitingPeers) {
+  $admissionList.replaceChildren();
+  const isHost = webrtcClient.isHost;
+  $admissionPanel.hidden = !isHost || waitingPeers.size === 0;
+  if (!isHost) return;
+
+  for (const [peerId, displayName] of waitingPeers) {
+    const row = document.createElement('div');
+    row.className = 'admission-request';
+
+    const name = document.createElement('span');
+    name.className = 'admission-request-name';
+    name.textContent = displayName;
+
+    const actions = document.createElement('div');
+    actions.className = 'admission-request-actions';
+    for (const [label, admit, className] of [
+      ['Admit', true, 'btn-primary'],
+      ['Deny', false, 'btn-danger'],
+    ]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `btn ${className}`;
+      button.textContent = label;
+      button.addEventListener('click', () => {
+        webrtcClient.decideAdmission(peerId, admit);
+        webrtcClient.waitingPeers.delete(peerId);
+        renderAdmissionQueue();
+      });
+      actions.appendChild(button);
+    }
+
+    row.append(name, actions);
+    $admissionList.appendChild(row);
+  }
+}
+
 /**
  * Handles the "Leave Room" action.
  * Closes all peer connections and the signaling WebSocket.
  */
 function handleLeaveRoom() {
+  stopCaptions();
   webrtcClient.leave();
+  $waitingRoomStatus.hidden = true;
+  renderAdmissionQueue(new Map());
+  $screenShareGrid.replaceChildren();
+  $screenShareGrid.hidden = true;
+  $btnShareScreen.disabled = true;
+  $btnToggleCaptions.disabled = true;
+  $btnShareScreen.hidden = false;
+  $btnStopScreenShare.hidden = true;
 
   // Reset URL
   const url = new URL(window.location.href);
@@ -1199,7 +1771,7 @@ const $peerGrid = document.getElementById('peer-grid');
  * @param {string}      peerId - The remote peer's ID (assigned by the server).
  * @param {MediaStream} stream - The remote peer's audio/video MediaStream.
  */
-function addPeerCard(peerId, stream) {
+function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peerId)) {
   if (peerElements.has(peerId)) return; // guard duplicate
 
   // Build the peer card element
@@ -1209,6 +1781,7 @@ function addPeerCard(peerId, stream) {
   li.dataset.peerId = peerId;
 
   const shortId = peerId.slice(0, 8);
+  const safeName = escapeHtml(displayName || 'Guest');
 
   li.innerHTML = `
     <div class="peer-avatar" aria-hidden="true">
@@ -1219,7 +1792,7 @@ function addPeerCard(peerId, stream) {
       </svg>
     </div>
     <div class="peer-info">
-      <span class="peer-name">Peer ${shortId}</span>
+      <span class="peer-name" title="${safeName}">${safeName}</span>
       <span class="peer-role" style="color: var(--emerald)">Attendee</span>
     </div>
     <div class="peer-indicators" aria-hidden="true">
@@ -1251,6 +1824,7 @@ function addPeerCard(peerId, stream) {
 function removePeerCard(peerId) {
   const $card = peerElements.get(peerId);
   if (!$card) return;
+  peerConnectionStates.delete(peerId);
 
   // Stop the audio element to release resources
   const $audio = $card.querySelector('audio');
@@ -1274,11 +1848,30 @@ function updatePeerCountBadge() {
 }
 
 function updateHostControls() {
-  const isInRoom = Boolean(currentRoomId && webrtcClient.isConnected);
+  const isInRoom = Boolean(currentRoomId && webrtcClient.isActiveParticipant);
   const isHost = isInRoom && webrtcClient.isHost;
-  if ($localPeerName) $localPeerName.textContent = isHost ? 'You (Host)' : 'You';
+  if ($localPeerName) $localPeerName.textContent = webrtcClient.userName || 'You';
   if ($localPeerRole) {
-    $localPeerRole.textContent = isInRoom ? (isHost ? 'Host' : 'Participant') : 'Not in a room';
+    $localPeerRole.textContent = isInRoom
+      ? (isHost ? 'Host · You' : 'Participant · You')
+      : 'Not in a room';
+  }
+
+  function updatePeerDisplayName(peerId, displayName) {
+    const name = String(displayName || 'Guest').trim() || 'Guest';
+    if (peerId === webrtcClient.clientId) {
+      if ($localPeerName) $localPeerName.textContent = name;
+      if ($chatUsername && document.activeElement !== $chatUsername) {
+        $chatUsername.value = name;
+      }
+      return;
+    }
+    const card = peerElements.get(peerId);
+    const nameElement = card?.querySelector('.peer-name');
+    if (nameElement) {
+      nameElement.textContent = name;
+      nameElement.title = name;
+    }
   }
 
   for (const [peerId, card] of peerElements) {
@@ -1289,6 +1882,22 @@ function updateHostControls() {
 function updatePeerModerationControls(peerId) {
   const card = peerElements.get(peerId);
   if (card) renderPeerModerationControls(card, peerId);
+}
+
+function updatePeerConnectionState(peerId, state) {
+  peerConnectionStates.set(peerId, state);
+  const card = peerElements.get(peerId);
+  if (!card) return;
+  card.classList.toggle('peer-card--reconnecting', state === 'disconnected' || state === 'checking');
+  card.classList.toggle('peer-card--connection-failed', state === 'failed');
+  const role = card.querySelector('.peer-role');
+  if (role) {
+    role.textContent = state === 'failed'
+      ? 'Connection failed'
+      : state === 'disconnected' || state === 'checking'
+        ? 'Reconnecting…'
+        : webrtcClient.isPeerMuted(peerId) ? 'Attendee · Muted' : 'Attendee';
+  }
 }
 
 function renderPeerModerationControls(card, peerId) {
@@ -1325,10 +1934,9 @@ function renderPeerModerationControls(card, peerId) {
   }
 
   const muted = webrtcClient.isPeerMuted(peerId);
-  const role = card.querySelector('.peer-role');
   const muteButton = controls.querySelector('[data-action="mute"]');
   card.classList.toggle('peer-card--muted', muted);
-  if (role) role.textContent = muted ? 'Attendee · Muted' : 'Attendee';
+  updatePeerConnectionState(peerId, peerConnectionStates.get(peerId) ?? 'connected');
   muteButton.textContent = muted ? 'Unmute' : 'Mute';
   muteButton.setAttribute('aria-pressed', String(muted));
   muteButton.setAttribute('aria-label', `${muted ? 'Unmute' : 'Mute'} participant ${peerId.slice(0, 8)}`);
@@ -1490,6 +2098,15 @@ function showAlert(message, type = 'info') {
  * - Incoming message rendering
  */
 function bindChat() {
+  const updateName = () => {
+    if (!webrtcClient.isConnected) return;
+    const name = $chatUsername.value.trim();
+    if (name) webrtcClient.setDisplayName(name);
+  };
+
+  $chatUsername?.addEventListener('change', updateName);
+  $chatUsername?.addEventListener('blur', updateName);
+
   const sendMessage = () => {
     const text = $chatInput.value.trim();
     if (!text || !webrtcClient.isConnected) return;

@@ -6,18 +6,30 @@ Routes (order matters — API routes registered before static mount):
   WS   /ws/{room_id}/{client_id}  → WebRTC signaling relay (delegates to ConnectionManager).
   GET  /*                          → Static frontend files served from client/.
 
-CORS is set to allow_origins=["*"] for development and cross-origin Render deployments.
-In production, replace "*" with your specific frontend domain.
+CORS uses the explicit origins configured through ALLOWED_ORIGINS. The default
+wildcard keeps the app same-origin-only for credentialed requests.
 """
 
+import base64
+import hashlib
+import hmac
 import logging
 from pathlib import Path
+import time
+from urllib.parse import urlparse
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from authlib.integrations.starlette_client import OAuth
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport.requests import Request as GoogleAuthRequest
+from google.oauth2.id_token import verify_oauth2_token
+from starlette.middleware.sessions import SessionMiddleware
 
+from .config import settings
 from .signaling import manager
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -40,17 +52,39 @@ app = FastAPI(
 )
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
-# allow_origins=["*"] allows any origin — required for cross-origin WebSocket
-# connections from browsers on different ports or domains.
-# Restrict to specific origins in production to prevent CSRF.
+# The default wildcard is treated as same-origin-only for credentialed HTTP
+# requests. Configure explicit origins when serving the frontend elsewhere.
+_configured_origins = [
+    origin.strip().rstrip("/")
+    for origin in settings.allowed_origins.split(",")
+    if origin.strip() and origin.strip() != "*"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_configured_origins,
+    allow_credentials=bool(_configured_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret,
+    session_cookie="worship_session",
+    max_age=60 * 60 * 24 * 7,
+    same_site="lax",
+    https_only=settings.session_cookie_secure,
+)
+
+oauth = OAuth()
+if settings.google_client_id and settings.google_client_secret:
+    oauth.register(
+        name="google",
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # API ROUTES  (must be registered BEFORE the static mount to avoid interception)
@@ -67,6 +101,151 @@ async def health_check() -> JSONResponse:
         "rooms":  manager.room_count,
         "peers":  manager.total_connections,
     })
+
+
+@app.get("/auth/me", tags=["auth"])
+async def current_user(request: Request) -> JSONResponse:
+    return JSONResponse({"user": request.session.get("user")})
+
+
+@app.get("/api/auth/config", tags=["auth"], summary="Return public authentication configuration")
+async def auth_config() -> JSONResponse:
+    return JSONResponse({
+        "google_client_id": settings.google_client_id,
+    })
+
+
+@app.post("/api/auth/google", tags=["auth"], summary="Verify Google ID token (GIS client-side flow)")
+async def api_auth_google(request: Request) -> JSONResponse:
+    """
+    Accepts a Google ID token (JWT credential) from the Google Identity Services
+    client-side sign-in flow.  Decodes the payload and creates a server-side
+    session so the WebSocket and ICE-server endpoints accept the user.
+
+    Request body: { "credential": "<JWT>" }
+    Response:     { "sub", "name", "email", "picture" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body.")
+
+    credential = body.get("credential")
+    if not isinstance(credential, str) or not credential:
+        raise HTTPException(status_code=400, detail="Missing 'credential' field.")
+    if not settings.google_client_id:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured.")
+
+    try:
+        payload = verify_oauth2_token(
+            credential,
+            GoogleAuthRequest(),
+            settings.google_client_id,
+        )
+    except (GoogleAuthError, ValueError) as exc:
+        logger.warning("Google ID token verification failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid Google credential.")
+
+    subject = payload.get("sub")
+    email = payload.get("email", "")
+    name = payload.get("name") or email or "Participant"
+    picture = payload.get("picture", "")
+
+    if not subject:
+        raise HTTPException(status_code=401, detail="Token missing subject (sub) claim.")
+
+    # Persist into the server-side session (same shape as the redirect flow)
+    user_data = {
+        "sub": str(subject),
+        "name": str(name)[:80],
+        "email": str(email)[:254],
+        "picture": str(picture)[:2048],
+    }
+    request.session["user"] = user_data
+
+    return JSONResponse(user_data)
+
+
+@app.get("/auth/google", tags=["auth"], name="google_login")
+async def google_login(request: Request):
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured.")
+
+    next_path = request.query_params.get("next", "/")
+    parsed_next = urlparse(next_path)
+    if not next_path.startswith("/") or next_path.startswith("//") or parsed_next.netloc:
+        next_path = "/"
+    request.session["auth_next"] = next_path
+    return await oauth.google.authorize_redirect(
+        request,
+        request.url_for("google_callback"),
+    )
+
+
+@app.get("/auth/google/callback", tags=["auth"], name="google_callback")
+async def google_callback(request: Request):
+    if not settings.google_client_id or not settings.google_client_secret:
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured.")
+
+    token = await oauth.google.authorize_access_token(request)
+    profile = token.get("userinfo")
+    if profile is None:
+        profile = await oauth.google.parse_id_token(request, token)
+    subject = profile.get("sub")
+    if not subject:
+        raise HTTPException(status_code=401, detail="Google did not return a verified account.")
+    if profile.get("email") and profile.get("email_verified") is False:
+        raise HTTPException(status_code=401, detail="A verified Google email is required.")
+
+    request.session["user"] = {
+        "sub": str(subject),
+        "name": str(profile.get("name") or profile.get("email") or "Participant")[:80],
+        "email": str(profile.get("email") or "")[:254],
+        "picture": str(profile.get("picture") or "")[:2048],
+    }
+    next_path = request.session.pop("auth_next", "/")
+    return RedirectResponse(next_path if next_path.startswith("/") and not next_path.startswith("//") else "/")
+
+
+@app.post("/auth/logout", tags=["auth"])
+async def logout(request: Request) -> JSONResponse:
+    request.session.clear()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/ice-servers", tags=["realtime"])
+async def ice_servers(request: Request) -> JSONResponse:
+    user = request.session.get("user")
+    if not isinstance(user, dict) or not user.get("sub"):
+        raise HTTPException(status_code=401, detail="Sign in required.")
+
+    servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+    ]
+    turn_urls = [value.strip() for value in settings.turn_urls.split(",") if value.strip()]
+    valid_turn_urls = []
+    for value in turn_urls:
+        parsed = urlparse(value)
+        authority = urlparse(f"//{parsed.path}")
+        if parsed.scheme.lower() in ("turn", "turns") and authority.hostname:
+            valid_turn_urls.append(value)
+    turn_urls = valid_turn_urls
+    if turn_urls and settings.turn_shared_secret:
+        ttl = min(max(settings.turn_credential_ttl_seconds, 300), 86400)
+        username = f"{int(time.time()) + ttl}:{user['sub']}"
+        credential = base64.b64encode(
+            hmac.new(
+                settings.turn_shared_secret.encode("utf-8"),
+                username.encode("utf-8"),
+                hashlib.sha1,
+            ).digest()
+        ).decode("ascii")
+        servers.append({"urls": turn_urls, "username": username, "credential": credential})
+    elif turn_urls:
+        logger.warning("TURN URLs are configured without TURN_SHARED_SECRET; omitting TURN servers.")
+
+    return JSONResponse({"iceServers": servers})
 
 
 # ─── WebSocket Signaling Endpoint ─────────────────────────────────────────────
@@ -94,8 +273,31 @@ async def websocket_endpoint(
                 { "type": "chat-message", "sender_id": "<id>", "timestamp": "...", ... }
         { "type": "pong" }
     """
-    # Register peer and broadcast peer-joined to room members
-    await manager.connect(websocket, room_id, client_id)
+    origin = websocket.headers.get("origin")
+    if origin:
+        host = websocket.headers.get("host", "")
+        forwarded_proto = websocket.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        scheme = "https" if forwarded_proto == "https" or websocket.url.scheme == "wss" else "http"
+        allowed_origins = {
+            f"{scheme}://{host}".rstrip("/"),
+            *(
+                configured.strip().rstrip("/")
+                for configured in settings.allowed_origins.split(",")
+                if configured.strip() and configured.strip() != "*"
+            ),
+        }
+        if origin.rstrip("/") not in allowed_origins:
+            await websocket.close(code=4403, reason="Origin not allowed")
+            return
+
+    # WebSocket sessions are signed by SessionMiddleware; never trust a client-provided host/name.
+    user = websocket.session.get("user")
+    if not isinstance(user, dict) or not user.get("sub"):
+        await websocket.close(code=4401, reason="Sign in required")
+        return
+
+    display_name = str(user.get("name") or user.get("email") or "Participant")
+    await manager.connect(websocket, room_id, client_id, display_name, str(user["sub"]))
     logger.info("WS open  — room='%s' client='%s'", room_id, client_id)
 
     try:
@@ -109,13 +311,20 @@ async def websocket_endpoint(
                 continue
 
             # ── WebRTC signal relay (offer / answer / ice-candidate) ───────────
-            if msg_type in ("offer", "answer", "ice-candidate"):
+            if msg_type in (
+                "offer", "answer", "ice-candidate", "ice-restart-request",
+                "screen-offer", "screen-answer", "screen-ice-candidate",
+            ):
                 await manager.relay_rtc(
                     room_id=room_id,
                     sender_id=client_id,
                     msg_type=msg_type,
                     payload=data,
                 )
+                continue
+
+            if msg_type == "screen-share-stop":
+                await manager.broadcast_screen_share_stopped(room_id, client_id)
                 continue
 
             # ── Chat broadcast ────────────────────────────────────────────────
@@ -125,6 +334,20 @@ async def websocket_endpoint(
                     sender_id=client_id,
                     payload=data,
                 )
+                continue
+
+            if msg_type == "set-display-name":
+                display_name = data.get("display_name")
+                if isinstance(display_name, str):
+                    await manager.update_display_name(room_id, client_id, display_name)
+                continue
+
+            if msg_type == "caption":
+                text = data.get("text")
+                if isinstance(text, str):
+                    await manager.broadcast_caption(
+                        room_id, client_id, text, data.get("is_final") is True
+                    )
                 continue
 
             if msg_type == "mute-peer":
@@ -139,6 +362,13 @@ async def websocket_endpoint(
                 target_id = data.get("target_id")
                 if isinstance(target_id, str):
                     await manager.kick_peer(room_id, client_id, target_id)
+                continue
+
+            if msg_type == "admission-decision":
+                target_id = data.get("target_id")
+                admit = data.get("admit")
+                if isinstance(target_id, str) and isinstance(admit, bool):
+                    await manager.decide_admission(room_id, client_id, target_id, admit)
                 continue
 
             # ── Legacy signal relay (signalType envelope) ─────────────────────
@@ -169,8 +399,9 @@ async def websocket_endpoint(
 
     finally:
         # Unregister peer and notify remaining room members
-        manager.disconnect(room_id, client_id)
-        await manager.broadcast_peer_left(room_id, client_id)
+        was_active_peer = await manager.disconnect(room_id, client_id, websocket)
+        if was_active_peer:
+            await manager.broadcast_peer_left(room_id, client_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

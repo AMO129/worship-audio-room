@@ -42,7 +42,13 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         self.rooms: Dict[str, Dict[str, WebSocket]] = {}
+        self.peer_names: Dict[str, Dict[str, str]] = {}
+        self.peer_users: Dict[str, Dict[str, str]] = {}
         self.muted_peers: Dict[str, set[str]] = {}
+        self.room_hosts: Dict[str, str] = {}
+        self.room_host_users: Dict[str, str] = {}
+        self.waiting: Dict[str, Dict[str, tuple[WebSocket, str, str]]] = {}
+        self.kicked_users: Dict[str, set[str]] = {}
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -51,6 +57,8 @@ class ConnectionManager:
         websocket: WebSocket,
         room_id: str,
         client_id: str,
+        display_name: str = "Guest",
+        user_id: str = "",
     ) -> None:
         """
         Accept the WebSocket, register the peer in its room, then:
@@ -66,14 +74,78 @@ class ConnectionManager:
         """
         await websocket.accept()
 
-        # Snapshot existing peers before registering the newcomer
+        clean_name = " ".join(
+            "".join(char for char in display_name if char.isprintable()).split()
+        )[:24] or "Guest"
+
+        room = self.rooms.get(room_id)
+        if room:
+            if user_id and user_id in self.kicked_users.get(room_id, set()):
+                await self._send(websocket, {"type": "peer-kicked"})
+                await websocket.close(code=4001, reason="Removed by host")
+                return
+            existing_id = next(
+                (peer_id for peer_id, peer_user in self.peer_users.get(room_id, {}).items()
+                 if peer_user and peer_user == user_id),
+                None,
+            )
+            if (
+                user_id
+                and user_id == self.room_host_users.get(room_id)
+                and not existing_id
+            ):
+                room[client_id] = websocket
+                self.peer_names.setdefault(room_id, {})[client_id] = clean_name
+                self.peer_users.setdefault(room_id, {})[client_id] = user_id
+                self.room_hosts[room_id] = client_id
+                await self._send(websocket, {
+                    "type": "room-users",
+                    "peers": list(room.keys())[:-1],
+                    "peer_names": {
+                        peer_id: self.peer_names.get(room_id, {}).get(peer_id, "Guest")
+                        for peer_id in room if peer_id != client_id
+                    },
+                    "host_id": client_id,
+                    "muted_peers": list(self.muted_peers.get(room_id, set())),
+                })
+                return
+            if existing_id:
+                room[existing_id] = websocket
+                self.peer_names.setdefault(room_id, {})[existing_id] = clean_name
+                await self._send(websocket, {
+                    "type": "room-users",
+                    "peers": [peer_id for peer_id in room if peer_id != existing_id],
+                    "peer_names": {
+                        peer_id: self.peer_names.get(room_id, {}).get(peer_id, "Guest")
+                        for peer_id in room if peer_id != existing_id
+                    },
+                    "host_id": self.room_hosts.get(room_id),
+                    "muted_peers": list(self.muted_peers.get(room_id, set())),
+                })
+                return
+            waiting = self.waiting.setdefault(room_id, {})
+            waiting[client_id] = (websocket, clean_name, user_id)
+            await self._send(websocket, {"type": "waiting-room"})
+            host_socket = room.get(self.room_hosts.get(room_id, ""))
+            if host_socket:
+                await self._send(host_socket, {
+                    "type": "admission-request",
+                    "peer_id": client_id,
+                    "peer_name": clean_name,
+                })
+            return
+
         room = self.rooms.setdefault(room_id, {})
-        existing_peer_ids = list(room.keys())
-        host_id = existing_peer_ids[0] if existing_peer_ids else client_id
+        names = self.peer_names.setdefault(room_id, {})
+        users = self.peer_users.setdefault(room_id, {})
+        self.room_hosts[room_id] = client_id
+        self.room_host_users[room_id] = user_id
         muted_peers = self.muted_peers.setdefault(room_id, set())
 
         # Register newcomer
         room[client_id] = websocket
+        names[client_id] = clean_name
+        users[client_id] = user_id
         logger.info(
             "Peer %s joined room '%s' (%d peer(s) now)",
             client_id, room_id, len(room),
@@ -82,38 +154,169 @@ class ConnectionManager:
         # Tell the joiner who is already in the room
         await self._send(websocket, {
             "type":        "room-users",
-            "peers":       existing_peer_ids,
-            "host_id":     host_id,
+            "peers":       [],
+            "peer_names":  {},
+            "host_id":     client_id,
             "muted_peers": list(muted_peers),
         })
 
-        # Notify each pre-existing peer so clients establish the mesh connection
-        for existing_id, existing_ws in list(room.items()):
-            if existing_id != client_id:
-                await self._send(existing_ws, {
-                    "type":    "peer-joined",
-                    "peer_id": client_id,
-                })
+    @staticmethod
+    def _clean_name(display_name: object) -> str:
+        return " ".join(
+            "".join(char for char in str(display_name) if char.isprintable()).split()
+        )[:24] or "Guest"
 
-    def disconnect(self, room_id: str, client_id: str) -> None:
+    async def update_display_name(
+        self,
+        room_id: str,
+        client_id: str,
+        display_name: object,
+    ) -> bool:
+        room = self.rooms.get(room_id, {})
+        if client_id not in room:
+            return False
+        name = self._clean_name(display_name)
+        names = self.peer_names.setdefault(room_id, {})
+        if names.get(client_id) == name:
+            return True
+        names[client_id] = name
+        payload = {"type": "participant-renamed", "peer_id": client_id, "peer_name": name}
+        for websocket in list(room.values()):
+            await self._send(websocket, payload)
+        return True
+
+    async def broadcast_caption(
+        self,
+        room_id: str,
+        sender_id: str,
+        text: object,
+        is_final: bool,
+    ) -> bool:
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room:
+            return False
+        clean_text = " ".join(str(text).split())[:240]
+        if not clean_text:
+            return False
+        payload = {
+            "type": "caption",
+            "peer_id": sender_id,
+            "speaker_name": self.peer_names.get(room_id, {}).get(sender_id, "Guest"),
+            "text": clean_text,
+            "is_final": bool(is_final),
+        }
+        for websocket in list(room.values()):
+            await self._send(websocket, payload)
+        return True
+
+    async def decide_admission(
+        self,
+        room_id: str,
+        sender_id: str,
+        target_id: str,
+        admit: bool,
+    ) -> bool:
+        """Admit or deny a waiting peer, allowing only the active room host."""
+        room = self.rooms.get(room_id, {})
+        if self.room_hosts.get(room_id) != sender_id:
+            return False
+
+        waiting = self.waiting.get(room_id, {})
+        pending = waiting.pop(target_id, None)
+        if pending is None:
+            return False
+        if not waiting:
+            self.waiting.pop(room_id, None)
+
+        target_ws, target_name, target_user = pending
+        if not admit:
+            await self._send(target_ws, {"type": "admission-denied"})
+            try:
+                await target_ws.close(code=4003, reason="Admission denied")
+            except Exception as exc:
+                logger.warning("Could not close denied peer '%s': %s", target_id, exc)
+            return True
+
+        peer_ids = list(room.keys())
+        names = self.peer_names.setdefault(room_id, {})
+        room[target_id] = target_ws
+        names[target_id] = target_name
+        self.peer_users.setdefault(room_id, {})[target_id] = target_user
+        await self._send(target_ws, {"type": "admitted"})
+        await self._send(target_ws, {
+            "type": "room-users",
+            "peers": peer_ids,
+            "peer_names": {peer_id: names.get(peer_id, "Guest") for peer_id in peer_ids},
+            "host_id": self.room_hosts.get(room_id),
+            "muted_peers": list(self.muted_peers.get(room_id, set())),
+        })
+
+        for peer_id, peer_ws in list(room.items()):
+            if peer_id != target_id:
+                await self._send(peer_ws, {
+                    "type": "peer-joined",
+                    "peer_id": target_id,
+                    "peer_name": target_name,
+                })
+        return True
+
+    async def disconnect(
+        self,
+        room_id: str,
+        client_id: str,
+        websocket: WebSocket | None = None,
+    ) -> bool:
         """
-        Remove a peer from its room. Deletes the room entry if it becomes empty.
+        Remove a peer from the active room or waiting queue.
 
         Args:
             room_id:   Room the peer is leaving.
             client_id: The departing peer's ID.
         """
         room = self.rooms.get(room_id, {})
+        waiting = self.waiting.get(room_id, {})
+        if client_id in waiting:
+            if websocket is not None and waiting[client_id][0] is not websocket:
+                return False
+            waiting.pop(client_id, None)
+            if not waiting:
+                self.waiting.pop(room_id, None)
+            host_socket = room.get(self.room_hosts.get(room_id, ""))
+            if host_socket:
+                await self._send(host_socket, {
+                    "type": "admission-cancelled",
+                    "peer_id": client_id,
+                })
+            return False
+
+        if client_id not in room or (
+            websocket is not None and room[client_id] is not websocket
+        ):
+            return False
+
+        departing_user = self.peer_users.get(room_id, {}).get(client_id, "")
         room.pop(client_id, None)
+        names = self.peer_names.get(room_id, {})
+        names.pop(client_id, None)
+        self.peer_users.get(room_id, {}).pop(client_id, None)
+        self.muted_peers.get(room_id, set()).discard(client_id)
 
         if not room:
             self.rooms.pop(room_id, None)
+            self.peer_names.pop(room_id, None)
+            self.peer_users.pop(room_id, None)
             self.muted_peers.pop(room_id, None)
+            self.room_hosts.pop(room_id, None)
+            self.room_host_users.pop(room_id, None)
+            self.kicked_users.pop(room_id, None)
             logger.info("Room '%s' is empty — removed.", room_id)
         else:
-            self.muted_peers.get(room_id, set()).discard(client_id)
+            if self.room_hosts.get(room_id) == client_id:
+                self.room_host_users[room_id] = departing_user
+                self.room_hosts[room_id] = next(iter(room))
 
         logger.info("Peer %s left room '%s'.", client_id, room_id)
+        return True
 
     # ─── Broadcast ────────────────────────────────────────────────────────────
 
@@ -126,13 +329,34 @@ class ConnectionManager:
             client_id: The ID of the departed peer.
         """
         room = self.rooms.get(room_id, {})
+        if not room:
+            waiting = self.waiting.pop(room_id, {})
+            for waiting_ws, _, _ in waiting.values():
+                await self._send(waiting_ws, {"type": "admission-denied"})
+                try:
+                    await waiting_ws.close(code=4003, reason="Host left the room")
+                except Exception as exc:
+                    logger.warning("Could not close waiting peer: %s", exc)
+            return
+
         payload = {
             "type": "peer-left",
             "peer_id": client_id,
-            "host_id": next(iter(room), None),
+            "host_id": self.room_hosts.get(room_id),
         }
         for peer_id, ws in list(room.items()):
             await self._send(ws, payload)
+
+        new_host = self.room_hosts.get(room_id)
+        if new_host and new_host != client_id:
+            host_socket = room.get(new_host)
+            if host_socket:
+                for waiting_id, (_, waiting_name, _) in self.waiting.get(room_id, {}).items():
+                    await self._send(host_socket, {
+                        "type": "admission-request",
+                        "peer_id": waiting_id,
+                        "peer_name": waiting_name,
+                    })
 
     async def set_peer_muted(
         self,
@@ -143,7 +367,7 @@ class ConnectionManager:
     ) -> bool:
         """Apply and broadcast host-only remote audio moderation."""
         room = self.rooms.get(room_id, {})
-        if not room or next(iter(room)) != sender_id or target_id not in room or target_id == sender_id:
+        if not room or self.room_hosts.get(room_id) != sender_id or target_id not in room or target_id == sender_id:
             return False
 
         muted_peers = self.muted_peers.setdefault(room_id, set())
@@ -161,9 +385,12 @@ class ConnectionManager:
         """Disconnect a participant when the current room host removes them."""
         room = self.rooms.get(room_id, {})
         target = room.get(target_id)
-        if not room or next(iter(room)) != sender_id or not target or target_id == sender_id:
+        if not room or self.room_hosts.get(room_id) != sender_id or not target or target_id == sender_id:
             return False
 
+        target_user = self.peer_users.get(room_id, {}).get(target_id)
+        if target_user:
+            self.kicked_users.setdefault(room_id, set()).add(target_user)
         await self._send(target, {"type": "peer-kicked"})
         try:
             await target.close(code=4001, reason="Removed by host")
@@ -189,14 +416,25 @@ class ConnectionManager:
             payload:   Original message dict from the client (will not be mutated).
         """
         room = self.rooms.get(room_id, {})
+        if sender_id not in room:
+            return
         enriched = {
             **payload,
             "type":      "chat-message",
             "sender_id": sender_id,
+            "sender_name": self.peer_names.get(room_id, {}).get(sender_id, "Guest"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         for ws in list(room.values()):
             await self._send(ws, enriched)
+
+    async def broadcast_screen_share_stopped(self, room_id: str, sender_id: str) -> None:
+        room = self.rooms.get(room_id, {})
+        if sender_id not in room:
+            return
+        payload = {"type": "screen-share-stop", "peer_id": sender_id}
+        for websocket in list(room.values()):
+            await self._send(websocket, payload)
 
     # ─── Signal Relay ─────────────────────────────────────────────────────────
 
@@ -220,6 +458,8 @@ class ConnectionManager:
             payload:   Client payload, must contain a "target_id" key.
         """
         room = self.rooms.get(room_id, {})
+        if sender_id not in room:
+            return
         target_id = payload.get("target_id")
         target_ws = room.get(target_id) if target_id else None
 
@@ -258,6 +498,8 @@ class ConnectionManager:
             signal_data: Arbitrary dict — signalType, sdp, candidate, etc.
         """
         room = self.rooms.get(room_id, {})
+        if sender_id not in room:
+            return
         target_ws = room.get(target_id)
 
         if not target_ws:

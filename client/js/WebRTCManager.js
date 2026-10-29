@@ -26,15 +26,40 @@ export class WebRTCManager {
     this._userName      = 'Host';
     this._hostId        = null;
     this._mutedPeers    = new Set();
+    this._peerNames     = new Map();
+    this.waitingPeers   = new Map();
+    this._settleJoin    = null;
+    this._isAdmitted    = false;
+    this._rtcConfig     = RTC_CONFIG;
+    this._iceRestartTimers = new Map();
+    this._iceRestartAttempts = new Map();
+    this.screenSenders = new Map();
+    this.screenReceivers = new Map();
+    this._pendingScreenCandidates = new Map();
+    this._screenStream = null;
+    this._reconnectTimer = null;
+    this._reconnectAttempt = 0;
+    this._shouldReconnect = false;
 
     // Public callbacks — set by the caller before joining
-    this.onPeerJoined   = null;   // (peerId, stream) => void
+    this.onPeerJoined   = null;   // (peerId, stream, displayName) => void
+    this.onPeerRenamed  = null;   // (peerId, displayName) => void
     this.onPeerLeft     = null;   // (peerId) => void
     this.onStatusChange = null;   // (status, message) => void
     this.onChatMessage  = null;   // (msg) => void
+    this.onCaption      = null;   // (msg) => void
     this.onHostChange   = null;   // (hostId) => void
     this.onPeerMuted    = null;   // (peerId, muted) => void
     this.onKicked        = null;   // () => void
+    this.onWaitingRoom   = null;   // () => void
+    this.onWaitingPeersChange = null; // (waitingPeers) => void
+    this.onAdmissionDenied = null; // () => void
+    this.onRoomJoined   = null;   // () => void
+    this.onPeerConnectionState = null; // (peerId, state) => void
+    this.onScreenShareStarted = null; // (stream) => void
+    this.onScreenShareStopped = null; // () => void
+    this.onRemoteScreenShare = null; // (peerId, stream) => void
+    this.onRemoteScreenShareStopped = null; // (peerId) => void
   }
 
   // ─────────────────────────────────────────────
@@ -48,29 +73,44 @@ export class WebRTCManager {
    * @param {string} [userName]
    * @returns {Promise<void>}
    */
-  join(roomId, audioManager, userName = 'Host') {
+  async join(roomId, audioManager, userName = 'Host') {
     this._roomId       = roomId;
     this._audioManager = audioManager;
     this._userName     = userName;
     this._clientId     = crypto.randomUUID();
+    this._shouldReconnect = true;
+    this._reconnectAttempt = 0;
     this._ensureAudioContainer();
+    this._rtcConfig = await this._loadRtcConfig();
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${location.host}/ws/${encodeURIComponent(roomId)}/${this._clientId}`;
+    const wsUrl = `${proto}//${location.host}/ws/${encodeURIComponent(roomId)}/${this._clientId}?name=${encodeURIComponent(userName)}`;
 
     return new Promise((resolve, reject) => {
+      this._openSocket(resolve, reject, wsUrl, true);
+    });
+  }
+
+  _openSocket(resolve, reject, wsUrl, isInitialConnection = false) {
+      this._settleJoin = isInitialConnection ? (error, result) => {
+        const settle = this._settleJoin;
+        this._settleJoin = null;
+        if (error) reject(error);
+        else resolve(result);
+      } : null;
       const ws = new WebSocket(wsUrl);
       this._ws = ws;
 
       ws.addEventListener('open', () => {
-        this._emitStatus('connected', 'Connected to room');
+        this._reconnectAttempt = 0;
         this._startPing();
-        resolve();
+        this._emitStatus('connecting', 'Signaling connected');
       });
 
       ws.addEventListener('error', (err) => {
         this._emitStatus('error', 'WebSocket error');
-        reject(err);
+        this._settleJoin?.(err);
+        if (!isInitialConnection) this._scheduleReconnect(wsUrl);
       });
 
       ws.addEventListener('message', (event) => {
@@ -83,14 +123,28 @@ export class WebRTCManager {
 
       ws.addEventListener('close', () => {
         this._stopPing();
-        this._emitStatus('disconnected', 'Disconnected');
+        if (this._settleJoin) {
+          this._settleJoin(new Error('Connection closed before room admission'));
+        } else {
+          this._scheduleReconnect(wsUrl);
+        }
       });
-    });
   }
 
   /** Gracefully leave: close all peer connections and the WebSocket. */
   leave() {
     this._stopPing();
+    this._shouldReconnect = false;
+    clearTimeout(this._reconnectTimer);
+    this._reconnectTimer = null;
+    this.stopScreenShare();
+
+    for (const [peerId, pc] of this.screenReceivers) {
+      try { pc.close(); } catch (_) { /* ignore */ }
+      this.onRemoteScreenShareStopped?.(peerId);
+    }
+    this.screenReceivers.clear();
+    this._pendingScreenCandidates.clear();
 
     for (const [peerId, pc] of this.peers) {
       this._closePeerConnection(peerId, pc);
@@ -98,6 +152,13 @@ export class WebRTCManager {
     this.peers.clear();
     this._pendingCandidates.clear();
     this._mutedPeers.clear();
+    this._peerNames.clear();
+    this.waitingPeers.clear();
+    this._settleJoin = null;
+    this._isAdmitted = false;
+    for (const timer of this._iceRestartTimers.values()) clearTimeout(timer);
+    this._iceRestartTimers.clear();
+    this._iceRestartAttempts.clear();
 
     if (this._ws) {
       try { this._ws.close(1000, 'User left'); } catch (_) { /* ignore */ }
@@ -126,6 +187,18 @@ export class WebRTCManager {
     this._send({ type: 'chat-message', sender_name: this._userName, text });
   }
 
+  sendCaption(text, isFinal) {
+    this._send({ type: 'caption', text, is_final: isFinal });
+  }
+
+  setDisplayName(displayName) {
+    const name = String(displayName ?? '').trim();
+    if (name && this.isConnected) {
+      this._userName = name;
+      this._send({ type: 'set-display-name', display_name: name });
+    }
+  }
+
   setPeerMuted(peerId, muted) {
     if (this.isHost) this._send({ type: 'mute-peer', target_id: peerId, muted });
   }
@@ -134,8 +207,48 @@ export class WebRTCManager {
     if (this.isHost) this._send({ type: 'kick-peer', target_id: peerId });
   }
 
+  async startScreenShare() {
+    if (!this.isActiveParticipant) throw new Error('Join the room before sharing your screen.');
+    if (this._screenStream) return this._screenStream;
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 30 } },
+      audio: false,
+    });
+    const track = stream.getVideoTracks()[0];
+    if (!track) throw new Error('No screen video track was selected.');
+
+    this._screenStream = stream;
+    track.addEventListener('ended', () => this.stopScreenShare(), { once: true });
+    this.onScreenShareStarted?.(stream);
+    for (const peerId of this.remotePeerIds) {
+      this._createScreenSender(peerId, stream);
+    }
+    return stream;
+  }
+
+  stopScreenShare() {
+    if (!this._screenStream) return;
+    const stream = this._screenStream;
+    this._screenStream = null;
+    this._send({ type: 'screen-share-stop' });
+    for (const [peerId, pc] of this.screenSenders) {
+      try { pc.close(); } catch (_) { /* ignore */ }
+      this.screenSenders.delete(peerId);
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    this.onScreenShareStopped?.();
+  }
+
+  decideAdmission(peerId, admit) {
+    if (this.isHost) this._send({ type: 'admission-decision', target_id: peerId, admit });
+  }
+
   isPeerMuted(peerId) {
     return this._mutedPeers.has(peerId);
+  }
+
+  getPeerName(peerId) {
+    return this._peerNames.get(peerId) ?? 'Guest';
   }
 
   /**
@@ -160,7 +273,9 @@ export class WebRTCManager {
   get peerCount()     { return this.peers.size; }
   get isConnected()   { return this._ws?.readyState === WebSocket.OPEN; }
   get isHost()        { return this._hostId !== null && this._clientId === this._hostId; }
+  get isActiveParticipant() { return this._isAdmitted; }
   get hostId()        { return this._hostId; }
+  get userName()      { return this._userName; }
   get remotePeerIds() { return [...this.peers.keys()]; }
 
   // ─────────────────────────────────────────────
@@ -170,15 +285,30 @@ export class WebRTCManager {
   /** @param {object} msg */
   _onMessage(msg) {
     switch (msg.type) {
+      case 'waiting-room': this._onWaitingRoom();                   break;
+      case 'admitted':     this._emitStatus('connecting', 'Joining room'); break;
+      case 'admission-request': this._onAdmissionRequest(msg);       break;
+      case 'admission-cancelled': this._onAdmissionCancelled(msg);   break;
+      case 'admission-denied':
+        this._isAdmitted = false;
+        this.onAdmissionDenied?.();
+        break;
       case 'room-users':    this._onRoomUsers(msg);        break;
       case 'peer-joined':   this._onPeerJoined(msg);       break;
+      case 'participant-renamed': this._onPeerRenamed(msg); break;
       case 'peer-left':     this._onPeerLeft(msg);         break;
       case 'participant-mute': this._onParticipantMute(msg); break;
       case 'peer-kicked':   this.onKicked?.();             break;
       case 'offer':         this._handleOffer(msg);        break;
       case 'answer':        this._handleAnswer(msg);       break;
       case 'ice-candidate': this._handleCandidate(msg);    break;
+      case 'ice-restart-request': this._onIceRestartRequest(msg); break;
+      case 'screen-offer': this._handleScreenOffer(msg); break;
+      case 'screen-answer': this._handleScreenAnswer(msg); break;
+      case 'screen-ice-candidate': this._handleScreenCandidate(msg); break;
+      case 'screen-share-stop': this._onScreenShareStop(msg); break;
       case 'chat-message':  this.onChatMessage?.(msg);     break;
+      case 'caption':       this.onCaption?.(msg);         break;
       case 'pong':          /* intentionally ignored */    break;
       default:
         console.debug('[WebRTCManager] Unknown message type:', msg.type);
@@ -194,7 +324,10 @@ export class WebRTCManager {
    * @param {{ peers: string[] }} msg
    */
   _onRoomUsers(msg) {
+    this._isAdmitted = true;
+    this._emitStatus('connected', 'Connected to room');
     this._hostId = msg.host_id ?? null;
+    this._peerNames = new Map(Object.entries(msg.peer_names ?? {}));
     this._mutedPeers = new Set(msg.muted_peers ?? []);
     this.onHostChange?.(this._hostId);
     for (const peerId of this._mutedPeers) {
@@ -202,8 +335,27 @@ export class WebRTCManager {
       this.onPeerMuted?.(peerId, true);
     }
     for (const peerId of msg.peers ?? []) {
-      this._preparePeer(peerId);
+      this._preparePeer(peerId, this.getPeerName(peerId));
     }
+    this.onRoomJoined?.();
+    this._settleJoin?.(null, 'joined');
+  }
+
+  _onWaitingRoom() {
+    this._isAdmitted = false;
+    this._emitStatus('waiting', 'Waiting for host approval');
+    this.onWaitingRoom?.();
+    this._settleJoin?.(null, 'waiting');
+  }
+
+  _onAdmissionRequest(msg) {
+    this.waitingPeers.set(msg.peer_id, msg.peer_name || 'Guest');
+    this.onWaitingPeersChange?.(this.waitingPeers);
+  }
+
+  _onAdmissionCancelled(msg) {
+    this.waitingPeers.delete(msg.peer_id);
+    this.onWaitingPeersChange?.(this.waitingPeers);
   }
 
   /**
@@ -211,14 +363,22 @@ export class WebRTCManager {
    * @param {{ peer_id: string }} msg
    */
   _onPeerJoined(msg) {
-    this._preparePeer(msg.peer_id);
+    this._peerNames.set(msg.peer_id, msg.peer_name || 'Guest');
+    this._preparePeer(msg.peer_id, this.getPeerName(msg.peer_id));
   }
 
-  _preparePeer(remotePeerId) {
+  _onPeerRenamed(msg) {
+    if (!msg.peer_id || typeof msg.peer_name !== 'string') return;
+    this._peerNames.set(msg.peer_id, msg.peer_name);
+    if (msg.peer_id === this._clientId) this._userName = msg.peer_name;
+    this.onPeerRenamed?.(msg.peer_id, msg.peer_name);
+  }
+
+  _preparePeer(remotePeerId, displayName = this.getPeerName(remotePeerId)) {
     if (!remotePeerId || remotePeerId === this._clientId) return;
     const isNewPeer = !this.peers.has(remotePeerId);
     const pc = this._createPeerConnection(remotePeerId);
-    if (isNewPeer) this.onPeerJoined?.(remotePeerId, null);
+    if (isNewPeer) this.onPeerJoined?.(remotePeerId, null, displayName);
 
     if (this._clientId.localeCompare(remotePeerId) < 0) {
       if (isNewPeer) this._initiateOffer(remotePeerId, pc);
@@ -241,6 +401,19 @@ export class WebRTCManager {
       ?.remove();
 
     this._mutedPeers.delete(msg.peer_id);
+    this._peerNames.delete(msg.peer_id);
+    const sender = this.screenSenders.get(msg.peer_id);
+    if (sender) {
+      try { sender.close(); } catch (_) { /* ignore */ }
+      this.screenSenders.delete(msg.peer_id);
+    }
+    const receiver = this.screenReceivers.get(msg.peer_id);
+    if (receiver) {
+      try { receiver.close(); } catch (_) { /* ignore */ }
+      this.screenReceivers.delete(msg.peer_id);
+      this.onRemoteScreenShareStopped?.(msg.peer_id);
+    }
+    this._pendingScreenCandidates.delete(msg.peer_id);
     if (msg.host_id !== undefined && msg.host_id !== this._hostId) {
       this._hostId = msg.host_id;
       this.onHostChange?.(this._hostId);
@@ -361,7 +534,7 @@ export class WebRTCManager {
     const existing = this.peers.get(remotePeerId);
     if (existing) return existing;
 
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection(this._rtcConfig);
     this.peers.set(remotePeerId, pc);
 
     // Trickle ICE
@@ -377,10 +550,17 @@ export class WebRTCManager {
 
     // ICE connection state monitoring
     pc.oniceconnectionstatechange = () => {
-      console.log(`[WebRTCManager] ICE state (${remotePeerId}):`, pc.iceConnectionState);
-      if (pc.iceConnectionState === 'failed') {
-        console.warn(`[WebRTCManager] ICE failed for ${remotePeerId}, restarting…`);
-        pc.restartIce();
+      const state = pc.iceConnectionState;
+      console.log(`[WebRTCManager] ICE state (${remotePeerId}):`, state);
+      this.onPeerConnectionState?.(remotePeerId, state);
+      if (state === 'connected' || state === 'completed') {
+        clearTimeout(this._iceRestartTimers.get(remotePeerId));
+        this._iceRestartTimers.delete(remotePeerId);
+        this._iceRestartAttempts.delete(remotePeerId);
+      } else if (state === 'failed' || state === 'disconnected') {
+        this._scheduleIceRestart(remotePeerId, pc, state === 'failed' ? 0 : 2000);
+      } else if (state === 'checking') {
+        this._scheduleIceRestart(remotePeerId, pc, 10000);
       }
     };
 
@@ -428,6 +608,9 @@ export class WebRTCManager {
    */
   _closePeerConnection(peerId, pc) {
     this._pendingCandidates.delete(peerId);
+    clearTimeout(this._iceRestartTimers.get(peerId));
+    this._iceRestartTimers.delete(peerId);
+    this._iceRestartAttempts.delete(peerId);
     const el = this._audioContainer?.querySelector(`[data-peer-id="${peerId}"]`);
     if (el) {
       el.pause();
@@ -442,6 +625,187 @@ export class WebRTCManager {
     this._pendingCandidates.delete(peerId);
     for (const candidate of candidates) {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+  }
+
+  async _createScreenSender(peerId, stream) {
+    if (this.screenSenders.has(peerId)) return;
+    const pc = new RTCPeerConnection(this._rtcConfig);
+    this.screenSenders.set(peerId, pc);
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        this._send({
+          type: 'screen-ice-candidate',
+          target_id: peerId,
+          candidate: candidate.toJSON(),
+        });
+      }
+    };
+    const track = stream.getVideoTracks()[0];
+    pc.addTrack(track, stream);
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      this._send({ type: 'screen-offer', target_id: peerId, sdp: offer.sdp });
+    } catch (error) {
+      console.error(`[WebRTCManager] Screen offer to ${peerId} failed:`, error);
+      pc.close();
+      this.screenSenders.delete(peerId);
+    }
+  }
+
+  async _handleScreenOffer(msg) {
+    try {
+      let pc = this.screenReceivers.get(msg.sender_id);
+      if (pc) {
+        try { pc.close(); } catch (_) { /* ignore */ }
+      }
+      pc = new RTCPeerConnection(this._rtcConfig);
+      this.screenReceivers.set(msg.sender_id, pc);
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          this._send({
+            type: 'screen-ice-candidate',
+            target_id: msg.sender_id,
+            candidate: candidate.toJSON(),
+          });
+        }
+      };
+      pc.ontrack = (event) => {
+        const stream = event.streams?.[0] ?? new MediaStream([event.track]);
+        this.onRemoteScreenShare?.(msg.sender_id, stream);
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: msg.sdp }));
+      const candidates = this._pendingScreenCandidates.get(msg.sender_id) ?? [];
+      this._pendingScreenCandidates.delete(msg.sender_id);
+      for (const candidate of candidates) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      this._send({ type: 'screen-answer', target_id: msg.sender_id, sdp: answer.sdp });
+    } catch (error) {
+      console.error(`[WebRTCManager] Screen offer from ${msg.sender_id} failed:`, error);
+    }
+  }
+
+  async _handleScreenAnswer(msg) {
+    const pc = this.screenSenders.get(msg.sender_id);
+    if (!pc) return;
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: msg.sdp }));
+      const candidates = this._pendingScreenCandidates.get(msg.sender_id) ?? [];
+      this._pendingScreenCandidates.delete(msg.sender_id);
+      for (const candidate of candidates) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    } catch (error) {
+      console.error(`[WebRTCManager] Screen answer from ${msg.sender_id} failed:`, error);
+    }
+  }
+
+  async _handleScreenCandidate(msg) {
+    const pc = this.screenReceivers.get(msg.sender_id) ?? this.screenSenders.get(msg.sender_id);
+    if (!pc || !pc.remoteDescription) {
+      const pending = this._pendingScreenCandidates.get(msg.sender_id) ?? [];
+      pending.push(msg.candidate);
+      this._pendingScreenCandidates.set(msg.sender_id, pending);
+      return;
+    }
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    } catch (error) {
+      console.error(`[WebRTCManager] Screen ICE candidate from ${msg.sender_id} failed:`, error);
+    }
+  }
+
+  _onScreenShareStop(msg) {
+    const pc = this.screenReceivers.get(msg.peer_id);
+    if (pc) {
+      try { pc.close(); } catch (_) { /* ignore */ }
+      this.screenReceivers.delete(msg.peer_id);
+      this.onRemoteScreenShareStopped?.(msg.peer_id);
+    }
+    this._pendingScreenCandidates.delete(msg.peer_id);
+  }
+
+  async _loadRtcConfig() {
+    try {
+      const response = await fetch('/api/ice-servers', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`ICE config request failed: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.warn('[WebRTCManager] Using public STUN fallback:', error.message);
+      return RTC_CONFIG;
+    }
+
+    _scheduleReconnect(wsUrl) {
+      if (!this._shouldReconnect || this._reconnectTimer) return;
+      const delay = Math.min(1000 * (2 ** this._reconnectAttempt), 15000);
+      this._reconnectAttempt += 1;
+      this._emitStatus('connecting', `Reconnecting in ${Math.ceil(delay / 1000)}s`);
+      this._reconnectTimer = setTimeout(() => {
+        this._reconnectTimer = null;
+        if (!this._shouldReconnect) return;
+        this._openSocket(
+          () => {},
+          () => this._scheduleReconnect(wsUrl),
+          wsUrl,
+          false,
+        );
+      }, delay);
+    }
+  }
+
+  _scheduleIceRestart(peerId, pc, delay) {
+    if (this._iceRestartTimers.has(peerId)) return;
+    const timer = setTimeout(() => {
+      this._iceRestartTimers.delete(peerId);
+      this._requestIceRestart(peerId, pc);
+    }, delay);
+    this._iceRestartTimers.set(peerId, timer);
+  }
+
+  _requestIceRestart(peerId, pc) {
+    if (pc.connectionState === 'closed') return;
+    if (this._clientId.localeCompare(peerId) < 0) {
+      this._restartIce(peerId, pc);
+    } else {
+      this._send({ type: 'ice-restart-request', target_id: peerId });
+    }
+  }
+
+  _onIceRestartRequest(msg) {
+    const pc = this.peers.get(msg.sender_id);
+    if (pc && this._clientId.localeCompare(msg.sender_id) < 0) {
+      this._restartIce(msg.sender_id, pc);
+    }
+  }
+
+  async _restartIce(peerId, pc) {
+    if (pc.connectionState === 'closed') return;
+    if (pc.signalingState !== 'stable') {
+      this._scheduleIceRestart(peerId, pc, 1000);
+      return;
+    }
+
+    const attempts = this._iceRestartAttempts.get(peerId) ?? 0;
+    if (attempts >= 5) {
+      this.onPeerConnectionState?.(peerId, 'failed');
+      return;
+    }
+    this._iceRestartAttempts.set(peerId, attempts + 1);
+
+    try {
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      this._send({ type: 'offer', target_id: peerId, sdp: offer.sdp });
+      this._scheduleIceRestart(peerId, pc, Math.min(1000 * (2 ** attempts), 8000));
+    } catch (error) {
+      console.warn(`[WebRTCManager] ICE restart for ${peerId} failed:`, error);
+      this._scheduleIceRestart(peerId, pc, Math.min(1000 * (2 ** attempts), 8000));
     }
   }
 

@@ -11,6 +11,9 @@ Environment Variables:
   LOG_LEVEL     - Python logging level (default: "INFO").
 """
 
+import secrets
+
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +29,17 @@ class Settings(BaseSettings):
 
     # Room limits
     max_room_size: int = 12
+
+    # Authentication
+    session_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
+    session_cookie_secure: bool = False
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+
+    # TURN REST credentials (coturn-compatible shared-secret mode)
+    turn_urls: str = ""
+    turn_shared_secret: str | None = None
+    turn_credential_ttl_seconds: int = 3600
 
 
 # Singleton settings instance imported by the rest of the app.

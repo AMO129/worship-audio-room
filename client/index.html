@@ -9,8 +9,35 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+
+  <!-- ═══════════════════════════════════════════════════
+       GOOGLE AUTH OVERLAY — Blocks UI until signed in
+       ═══════════════════════════════════════════════════ -->
+  <div id="auth-overlay" class="auth-overlay" role="dialog" aria-modal="true" aria-label="Sign in required">
+    <div class="auth-overlay-card">
+      <div class="auth-overlay-brand" aria-hidden="true">
+        <svg width="40" height="40" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
+          <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+          <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+          <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
+        </svg>
+      </div>
+      <h1 class="auth-overlay-title">Worship Audio Room</h1>
+      <p class="auth-overlay-subtitle">Sign in with your Google account to create or join a call</p>
+
+      <!-- Google GIS renders its button here -->
+      <div id="google-signin-btn" class="auth-google-btn-wrap"></div>
+
+      <!-- Dev/Test fallback when running on localhost without a real Client ID -->
+      <button id="dev-login-btn" class="btn btn-ghost auth-dev-btn" type="button" hidden>
+        🛠️ Dev / Test Login (localhost only)
+      </button>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════════════════
        TOP HEADER
@@ -81,6 +108,12 @@
           </svg>
           <span id="chat-toggle-label">Hide Chat</span>
         </button>
+        <a id="btn-sign-in" class="btn btn-primary" href="/auth/google" hidden>Sign in with Google</a>
+        <div id="user-profile-badge" class="user-profile-badge" hidden>
+          <img id="user-avatar" class="user-avatar" src="" alt="User avatar" width="28" height="28" referrerpolicy="no-referrer" />
+          <span id="account-label" class="account-label"></span>
+          <button id="btn-sign-out" class="btn btn-ghost btn-sign-out" type="button">Sign Out</button>
+        </div>
 
         <!-- Connection Status Badge -->
         <div id="connection-status" class="status-badge status-disconnected" role="status" aria-live="polite">
@@ -111,8 +144,37 @@
             </span>
             Meeting Stage
           </h2>
-          <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
+          <div class="stage-header-actions">
+            <button id="btn-share-screen" class="btn btn-ghost" type="button" disabled aria-label="Share screen">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <rect x="1.5" y="2" width="13" height="9" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M6 14h4M8 11v3M6 6l2-2 2 2M8 4v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Share Screen
+            </button>
+            <button id="btn-stop-screen-share" class="btn btn-danger" type="button" hidden aria-label="Stop screen sharing">
+              Stop Sharing
+            </button>
+            <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">
+              Start Captions
+            </button>
+            <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
+          </div>
         </div>
+
+        <div id="waiting-room-status" class="waiting-room-status" role="status" hidden>
+          Waiting for the host to admit you.
+        </div>
+        <section id="admission-panel" class="admission-panel" aria-label="Waiting room requests" hidden>
+          <div class="admission-panel-heading">Waiting to join</div>
+          <div id="admission-list" class="admission-list"></div>
+        </section>
+
+        <div id="screen-share-grid" class="screen-share-grid" aria-label="Shared screens" hidden></div>
+        <section id="captions-panel" class="captions-panel" aria-live="polite" hidden>
+          <div class="captions-heading">Live captions · ephemeral</div>
+          <div id="captions-feed" class="captions-feed"></div>
+        </section>
 
         <!-- Peer Video / Audio Grid -->
         <div id="peer-grid" class="peer-grid" role="list" aria-label="Connected attendees">
@@ -705,7 +767,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=4"></script>
+  <script type="module" src="js/app.js?v=11"></script>
 
 </body>
 </html>
