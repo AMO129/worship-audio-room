@@ -2290,7 +2290,7 @@ function renderChatMessage(msg) {
 }
 
 function getMeetingShareUrl() {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.pathname, window.location.origin);
   url.searchParams.set('room', currentRoomId);
   return url.toString();
 }
