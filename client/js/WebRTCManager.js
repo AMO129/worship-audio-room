@@ -740,8 +740,9 @@ export class WebRTCManager {
       console.warn('[WebRTCManager] Using public STUN fallback:', error.message);
       return RTC_CONFIG;
     }
+  }
 
-    _scheduleReconnect(wsUrl) {
+  _scheduleReconnect(wsUrl) {
       if (!this._shouldReconnect || this._reconnectTimer) return;
       const delay = Math.min(1000 * (2 ** this._reconnectAttempt), 15000);
       this._reconnectAttempt += 1;
@@ -756,7 +757,6 @@ export class WebRTCManager {
           false,
         );
       }, delay);
-    }
   }
 
   _scheduleIceRestart(peerId, pc, delay) {
