@@ -1872,25 +1872,25 @@ function updateHostControls() {
       : 'Not in a room';
   }
 
-  function updatePeerDisplayName(peerId, displayName) {
-    const name = String(displayName || 'Guest').trim() || 'Guest';
-    if (peerId === webrtcClient.clientId) {
-      if ($localPeerName) $localPeerName.textContent = name;
-      if ($chatUsername && document.activeElement !== $chatUsername) {
-        $chatUsername.value = name;
-      }
-      return;
-    }
-    const card = peerElements.get(peerId);
-    const nameElement = card?.querySelector('.peer-name');
-    if (nameElement) {
-      nameElement.textContent = name;
-      nameElement.title = name;
-    }
-  }
-
   for (const [peerId, card] of peerElements) {
     renderPeerModerationControls(card, peerId);
+  }
+}
+
+function updatePeerDisplayName(peerId, displayName) {
+  const name = String(displayName || 'Guest').trim() || 'Guest';
+  if (peerId === webrtcClient.clientId) {
+    if ($localPeerName) $localPeerName.textContent = name;
+    if ($chatUsername && document.activeElement !== $chatUsername) {
+      $chatUsername.value = name;
+    }
+    return;
+  }
+  const card = peerElements.get(peerId);
+  const nameElement = card?.querySelector('.peer-name');
+  if (nameElement) {
+    nameElement.textContent = name;
+    nameElement.title = name;
   }
 }
 
