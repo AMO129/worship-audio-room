@@ -194,8 +194,16 @@ export class WebRTCManager {
    * Broadcast a chat message to the room.
    * @param {string} text
    */
-  sendChat(text) {
-    this._send({ type: 'chat-message', sender_name: this._userName, text });
+  sendChat(text, replyTo = null) {
+    this._send({
+      type: 'chat-message',
+      sender_name: this._userName,
+      text,
+      reply_to: replyTo ? {
+        sender_name: String(replyTo.sender_name || 'Guest').slice(0, 80),
+        text: String(replyTo.text || '').slice(0, 500),
+      } : null,
+    });
   }
 
   sendCaption(text, isFinal) {

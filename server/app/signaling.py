@@ -646,6 +646,14 @@ class ConnectionManager:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "text": text,
         }
+        reply_to = payload.get("reply_to")
+        if isinstance(reply_to, dict):
+            reply_text = " ".join(str(reply_to.get("text", "")).split())[:500]
+            if reply_text:
+                enriched["reply_to"] = {
+                    "sender_name": self._clean_name(reply_to.get("sender_name", "Guest")),
+                    "text": reply_text,
+                }
         for ws in list(room.values()):
             await self._send(ws, enriched)
         return enriched

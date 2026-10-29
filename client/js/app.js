@@ -14,7 +14,7 @@
  */
 
 import { AudioManager, EngineState } from './AudioManager.js?v=3';
-import { WebRTCManager }              from './WebRTCManager.js?v=13';
+import { WebRTCManager }              from './WebRTCManager.js?v=14';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -177,6 +177,7 @@ let pendingRoomId = null;
 // -- Header / Room Controls --
 const $roomIdInput      = document.getElementById('room-id-input');
 const $btnJoin          = document.getElementById('btn-join');
+const $btnScheduleCall  = document.getElementById('btn-schedule-call');
 const $btnLeave         = document.getElementById('btn-leave');
 const $connectionStatus = document.getElementById('connection-status');
 const $statusText       = document.getElementById('status-text');
@@ -278,8 +279,19 @@ const $btnToggleCaptions = document.getElementById('btn-toggle-captions');
 const $btnRaiseHand = document.getElementById('btn-raise-hand');
 const $btnReaction = document.getElementById('btn-reaction');
 const $btnRecord = document.getElementById('btn-record');
-const $btnCalendar = document.getElementById('btn-calendar');
 const $btnMuteEveryone = document.getElementById('btn-mute-everyone');
+const $btnMoreControls = document.getElementById('btn-more-controls');
+const $moreControlsMenu = document.getElementById('more-controls-menu');
+const $reactionMenu = document.getElementById('reaction-menu');
+const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
+const $audioDeck = document.getElementById('audio-deck');
+const $scheduleModal = document.getElementById('schedule-modal');
+const $btnCloseSchedule = document.getElementById('btn-close-schedule');
+const $scheduleRoom = document.getElementById('schedule-room');
+const $scheduleStart = document.getElementById('schedule-start');
+const $btnStartNow = document.getElementById('btn-start-now');
+const $btnCreateInvite = document.getElementById('btn-create-invite');
+const $chatReplyPreview = document.getElementById('chat-reply-preview');
 const $screenShareGrid = document.getElementById('screen-share-grid');
 const $captionsPanel = document.getElementById('captions-panel');
 const $captionsFeed = document.getElementById('captions-feed');
@@ -288,6 +300,8 @@ let captionsActive = false;
 let handRaised = false;
 let recorder = null;
 let recordingChunks = [];
+let replyToMessage = null;
+const raisedHands = new Set();
 
 // -- Auth Overlay --
 const $authOverlay      = document.getElementById('auth-overlay');
@@ -348,13 +362,78 @@ function bindCollaborationTools() {
     $btnRaiseHand.textContent = handRaised ? 'Lower Hand' : 'Raise Hand';
     $btnRaiseHand.setAttribute('aria-pressed', String(handRaised));
   });
-  $btnReaction?.addEventListener('click', () => webrtcClient.sendReaction('❤️'));
+  $btnReaction?.addEventListener('click', () => {
+    $reactionMenu.hidden = !$reactionMenu.hidden;
+  });
+  $reactionMenu?.addEventListener('click', event => {
+    const button = event.target.closest('[data-reaction]');
+    if (!button) return;
+    if (button.dataset.reaction === '➕') {
+      const custom = window.prompt('Enter an emoji to send');
+      if (custom) webrtcClient.sendReaction(custom);
+    } else {
+      webrtcClient.sendReaction(button.dataset.reaction);
+    }
+    $reactionMenu.hidden = true;
+  });
   $btnMuteEveryone?.addEventListener('click', () => {
     webrtcClient.muteEveryone();
     showAlert('Everyone has been muted.', 'info');
   });
   $btnRecord?.addEventListener('click', toggleLocalRecording);
-  $btnCalendar?.addEventListener('click', downloadCalendarInvite);
+  $btnMoreControls?.addEventListener('click', () => {
+    $moreControlsMenu.hidden = !$moreControlsMenu.hidden;
+    $btnMoreControls.setAttribute('aria-expanded', String(!$moreControlsMenu.hidden));
+  });
+  $btnToggleAudioConsole?.addEventListener('click', () => {
+    const hidden = !$audioDeck.classList.toggle('audio-deck--collapsed');
+    $btnToggleAudioConsole.textContent = hidden ? 'Show' : 'Hide';
+    $btnToggleAudioConsole.setAttribute('aria-expanded', String(!hidden));
+  });
+}
+
+function bindScheduleCall() {
+  const open = () => {
+    $scheduleRoom.value = $roomIdInput.value.trim();
+    $scheduleStart.value = new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16);
+    $scheduleModal.hidden = false;
+    $scheduleRoom.focus();
+  };
+  $btnScheduleCall?.addEventListener('click', open);
+  $btnCloseSchedule?.addEventListener('click', () => { $scheduleModal.hidden = true; });
+  $scheduleModal?.addEventListener('click', event => {
+    if (event.target === $scheduleModal) $scheduleModal.hidden = true;
+  });
+  $btnStartNow?.addEventListener('click', () => {
+    const room = $scheduleRoom.value.trim();
+    if (!room) return showAlert('Enter a room ID first.', 'warn');
+    $roomIdInput.value = room;
+    $scheduleModal.hidden = true;
+    handleJoinRoom();
+  });
+  $btnCreateInvite?.addEventListener('click', () => {
+    const room = $scheduleRoom.value.trim();
+    const start = new Date($scheduleStart.value);
+    if (!room || Number.isNaN(start.getTime())) {
+      showAlert('Enter a room ID and start time.', 'warn');
+      return;
+    }
+    const url = new URL(window.location.pathname, window.location.origin);
+    url.searchParams.set('room', room);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const format = date => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    const ics = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Worship Room//EN',
+      'BEGIN:VEVENT', `UID:${room}@worship-room`, `DTSTAMP:${format(new Date())}`,
+      `DTSTART:${format(start)}`, `DTEND:${format(end)}`, 'SUMMARY:Worship Room gathering',
+      `DESCRIPTION:Join Worship Room: ${url}`, `URL:${url}`, 'END:VEVENT', 'END:VCALENDAR',
+    ].join('\r\n');
+    const download = document.createElement('a');
+    download.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+    download.download = `worship-room-${room}.ics`;
+    download.click();
+    $scheduleModal.hidden = true;
+  });
 }
 
 function handleRoomNotification(message) {
@@ -465,10 +544,14 @@ async function bootstrap() {
   webrtcClient.onCaption = renderCaption;
   webrtcClient.onRaiseHand = (message) => {
     const name = webrtcClient.getPeerName(message.peer_id) || message.peer_id;
+    if (message.raised) raisedHands.add(message.peer_id);
+    else raisedHands.delete(message.peer_id);
+    updatePeerHandIndicator(message.peer_id, message.raised);
     showAlert(`${name} ${message.raised ? 'raised' : 'lowered'} their hand.`, 'info');
   };
   webrtcClient.onReaction = (message) => {
     const name = webrtcClient.getPeerName(message.peer_id) || 'Someone';
+    renderPeerReaction(message.peer_id, message.emoji);
     showAlert(`${name} reacted ${message.emoji || ''}`, 'info');
   };
   webrtcClient.onPoll = (message) => {
@@ -555,6 +638,7 @@ async function bootstrap() {
   bindChat();
   bindPlayPause();
   bindCollaborationTools();
+  bindScheduleCall();
 
   // Initialise UI to a known idle state
   syncFSMBadge(EngineState.SWELL);
@@ -1868,7 +1952,6 @@ function completeRoomJoin() {
   $btnRaiseHand.disabled = false;
   $btnReaction.disabled = false;
   $btnRecord.disabled = false;
-  $btnCalendar.disabled = false;
   $btnJoin.disabled = true;
   $roomIdInput.disabled = true;
   $roomModeDisplay.textContent = 'Live';
@@ -1932,7 +2015,6 @@ function handleLeaveRoom() {
   $btnRaiseHand.disabled = true;
   $btnReaction.disabled = true;
   $btnRecord.disabled = true;
-  $btnCalendar.disabled = true;
   $btnMuteEveryone.disabled = true;
   $btnMuteEveryone.hidden = true;
   if (recorder?.state === 'recording') recorder.stop();
@@ -2358,7 +2440,9 @@ function bindChat() {
     const text = $chatInput.value.trim();
     if (!text || !webrtcClient.isConnected) return;
 
-    webrtcClient.sendChat(text);
+    webrtcClient.sendChat(text, replyToMessage);
+    replyToMessage = null;
+    $chatReplyPreview.hidden = true;
     $chatInput.value = '';
     $chatInput.focus();
   };
@@ -2429,10 +2513,60 @@ function renderChatMessage(msg) {
       <span class="chat-bubble-time">${time}</span>
     </div>
     <div class="chat-bubble-text">${escapeHtml(String(msg.text ?? ''))}</div>
+    ${msg.reply_to ? `<div class="chat-reply-quote">Replying to ${escapeHtml(msg.reply_to.sender_name || 'Guest')}: ${escapeHtml(msg.reply_to.text || '')}</div>` : ''}
+    <div class="chat-bubble-actions">
+      <button type="button" data-chat-action="reply">Reply</button>
+      <button type="button" data-chat-action="react">React</button>
+      <button type="button" data-chat-action="copy">Copy</button>
+    </div>
   `;
+  div.querySelector('[data-chat-action="reply"]').addEventListener('click', () => {
+    replyToMessage = msg;
+    $chatReplyPreview.textContent = `Replying to ${msg.sender_name || 'Guest'}: ${msg.text}`;
+    $chatReplyPreview.hidden = false;
+    $chatInput.focus();
+  });
+  div.querySelector('[data-chat-action="react"]').addEventListener('click', () => {
+    $reactionMenu.hidden = false;
+    $chatInput.focus();
+  });
+  div.querySelector('[data-chat-action="copy"]').addEventListener('click', async () => {
+    await navigator.clipboard?.writeText(String(msg.text ?? ''));
+    showAlert('Message copied.', 'info');
+  });
 
   $chatMessages.appendChild(div);
   $chatMessages.scrollTop = $chatMessages.scrollHeight;
+}
+
+function updatePeerHandIndicator(peerId, raised) {
+  const card = peerId === webrtcClient.clientId
+    ? document.querySelector('[data-peer-id="local"]')
+    : peerElements.get(peerId);
+  if (!card) return;
+  let indicator = card.querySelector('.peer-hand-indicator');
+  if (raised && !indicator) {
+    indicator = document.createElement('span');
+    indicator.className = 'peer-hand-indicator';
+    indicator.textContent = '✋';
+    indicator.title = 'Hand raised';
+    indicator.setAttribute('aria-label', 'Hand raised');
+    card.appendChild(indicator);
+  } else if (!raised) {
+    indicator?.remove();
+  }
+}
+
+function renderPeerReaction(peerId, emoji) {
+  const card = peerId === webrtcClient.clientId
+    ? document.querySelector('[data-peer-id="local"]')
+    : peerElements.get(peerId);
+  if (!card || !emoji) return;
+  const bubble = document.createElement('span');
+  bubble.className = 'peer-reaction-bubble';
+  bubble.textContent = emoji;
+  card.appendChild(bubble);
+  setTimeout(() => bubble.remove(), 1800);
 }
 
 function getMeetingShareUrl() {

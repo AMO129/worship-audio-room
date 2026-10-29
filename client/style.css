@@ -504,6 +504,7 @@ body {
   width: 100%;
   justify-content: flex-start;
   flex-wrap: wrap;
+  position: relative;
 }
 
 .meeting-stage > .section-header .stage-header-actions .btn {
@@ -674,6 +675,149 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px; /* prevent scrollbar overlap */
+}
+
+.audio-deck--collapsed > :not(.section-header) {
+  display: none;
+}
+
+.audio-console-toggle {
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 0.7rem;
+}
+
+.reaction-menu {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.more-controls-menu {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: calc(100% + 6px);
+  display: grid;
+  gap: 5px;
+  min-width: 170px;
+  padding: 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+.more-controls-menu[hidden] { display: none; }
+
+.reaction-menu[hidden] { display: none; }
+.reaction-menu button {
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  padding: 5px;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+.reaction-menu button:hover { background: var(--bg-hover); }
+
+.peer-hand-indicator {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  padding: 4px 6px;
+  border-radius: var(--r-full);
+  background: var(--amber-dim);
+  color: var(--amber);
+  box-shadow: var(--shadow-glow-amber);
+}
+
+.peer-reaction-bubble {
+  position: absolute;
+  right: 18px;
+  bottom: 34px;
+  z-index: 2;
+  font-size: 2rem;
+  animation: peer-reaction-rise 1.8s ease-out forwards;
+}
+@keyframes peer-reaction-rise {
+  from { opacity: 1; transform: translateY(0) scale(.8); }
+  to { opacity: 0; transform: translateY(-45px) scale(1.2); }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background: rgba(3, 7, 18, 0.75);
+}
+.modal-backdrop[hidden] { display: none; }
+.schedule-modal {
+  position: relative;
+  width: min(440px, 100%);
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-6);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-xl);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+}
+.schedule-modal h2 { font-size: 1.1rem; }
+.schedule-modal p { color: var(--text-secondary); font-size: .85rem; }
+.schedule-modal label { color: var(--text-secondary); font-size: .75rem; }
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.schedule-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
+
+.chat-bubble-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+.chat-bubble:hover .chat-bubble-actions,
+.chat-bubble:focus-within .chat-bubble-actions { opacity: 1; }
+.chat-bubble-actions button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .68rem;
+  cursor: pointer;
+}
+.chat-bubble-actions button:hover { color: var(--blue); }
+.chat-reply-quote,
+.chat-reply-preview {
+  margin-top: 6px;
+  padding: 5px 7px;
+  border-left: 2px solid var(--purple);
+  color: var(--text-secondary);
+  font-size: .72rem;
+}
+.chat-compose { position: relative; }
+.chat-reply-preview {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-elevated);
 }
 
 .deck-label {
@@ -1745,7 +1889,7 @@ body {
    ═══════════════════════════════════════════════════════════ */
 
 .stage-grid {
-  grid-template-columns: 1fr 1fr 340px; /* add third column */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 340px;
 }
 
 .stage-grid > * { min-width: 0; }
