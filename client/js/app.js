@@ -340,15 +340,15 @@ function applyDeepLink() {
     pendingRoomId = roomParam;
     return true;
   }
-
-  function resetChatFeed() {
-    $chatMessages.innerHTML = `
-      <div class="chat-empty">
-        <span>No messages yet.<br/>Join a room to chat.</span>
-      </div>
-    `;
-  }
   return false;
+}
+
+function resetChatFeed() {
+  $chatMessages.innerHTML = `
+    <div class="chat-empty">
+      <span>No messages yet.<br/>Join a room to chat.</span>
+    </div>
+  `;
 }
 
 /**

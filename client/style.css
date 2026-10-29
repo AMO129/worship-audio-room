@@ -181,6 +181,8 @@ body {
   flex-shrink: 0;
 }
 
+.brand > .room-name-badge { order: 3; }
+
 .brand-icon {
   width: 36px;
   height: 36px;
