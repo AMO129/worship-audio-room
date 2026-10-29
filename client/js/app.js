@@ -473,6 +473,13 @@ async function initGoogleSignIn() {
       }
       if (config.google_oauth_enabled && $authOauthLink) {
         $authOauthLink.hidden = false;
+      } else if ($authOauthLink) {
+        $authOauthLink.textContent = 'Google sign-in setup required';
+        $authOauthLink.setAttribute('aria-disabled', 'true');
+        $authOauthLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          showAlert('Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render to enable Google sign-in.', 'warn');
+        });
       }
     }
   } catch (err) {
