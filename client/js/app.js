@@ -250,6 +250,11 @@ const $btnEmojiPicker = document.getElementById('btn-emoji-picker');
 const $emojiPicker    = document.getElementById('emoji-picker');
 
 // -- Room sharing --
+const $btnShare       = document.getElementById('btn-share');
+const $shareOptions   = document.getElementById('share-options');
+const $shareNative    = document.getElementById('share-native');
+const $shareWhatsapp  = document.getElementById('share-whatsapp');
+const $shareEmail     = document.getElementById('share-email');
 const $btnCopyLink    = document.getElementById('btn-copy-link');
 const $btnToggleChat  = document.getElementById('btn-toggle-chat');
 const $chatToggleLabel = document.getElementById('chat-toggle-label');
@@ -432,7 +437,7 @@ async function bootstrap() {
   bindCamera();
   bindCaptions();
   bindChatVisibility();
-  bindCopyLink();
+  bindShareMenu();
   bindChat();
   bindPlayPause();
 
@@ -1704,7 +1709,7 @@ async function handleJoinRoom() {
     if (joinState === 'waiting') {
       $waitingRoomStatus.hidden = false;
       $roomModeDisplay.textContent = 'Waiting';
-      $btnCopyLink.disabled = true;
+      $btnShare.disabled = true;
       setConnectionStatus('waiting', 'Waiting for host approval');
       return;
     }
@@ -1728,7 +1733,7 @@ function completeRoomJoin() {
   if (!currentRoomId || !webrtcClient.isActiveParticipant) return;
   $waitingRoomStatus.hidden = true;
   $btnLeave.disabled = false;
-  $btnCopyLink.disabled = false;
+  $btnShare.disabled = false;
   $chatInput.disabled = false;
   $btnChatSend.disabled = false;
   $btnEmojiPicker.disabled = false;
@@ -1803,7 +1808,7 @@ function handleLeaveRoom() {
   const url = new URL(window.location.href);
   url.searchParams.delete('room');
   window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
-  if ($btnCopyLink) $btnCopyLink.disabled = true;
+  if ($btnShare) $btnShare.disabled = true;
   if ($chatInput)   $chatInput.disabled   = true;
   if ($btnChatSend) $btnChatSend.disabled = true;
   if ($btnEmojiPicker) $btnEmojiPicker.disabled = true;
@@ -2284,19 +2289,48 @@ function renderChatMessage(msg) {
   $chatMessages.scrollTop = $chatMessages.scrollHeight;
 }
 
-/**
- * Binds the "Copy Link" button.
- * Generates a shareable URL with the ?room= param.
- */
-function bindCopyLink() {
-  $btnCopyLink.addEventListener('click', async () => {
+function getMeetingShareUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', currentRoomId);
+  return url.toString();
+}
+
+function closeShareMenu() {
+  $shareOptions.hidden = true;
+  $btnShare.setAttribute('aria-expanded', 'false');
+}
+
+function bindShareMenu() {
+  $btnShare.addEventListener('click', () => {
     if (!currentRoomId) return;
+    const shareUrl = getMeetingShareUrl();
+    const message = `Join my Worship Room: ${shareUrl}`;
+    $shareWhatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    $shareEmail.href = `mailto:?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
+    $shareNative.hidden = typeof navigator.share !== 'function';
+    $shareOptions.hidden = !$shareOptions.hidden;
+    $btnShare.setAttribute('aria-expanded', String(!$shareOptions.hidden));
+  });
 
-    const url = new URL(window.location.href);
-    url.searchParams.set('room', currentRoomId);
-    const shareUrl = url.toString();
-
+  $shareNative.addEventListener('click', async () => {
     try {
+      await navigator.share({
+        title: 'Join my Worship Room',
+        text: 'Join my Worship Room',
+        url: getMeetingShareUrl(),
+      });
+      closeShareMenu();
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('[app] Native share failed:', error);
+        showAlert('Could not open the sharing options.', 'warn');
+      }
+    }
+  });
+
+  $btnCopyLink.addEventListener('click', async () => {
+    try {
+      const shareUrl = getMeetingShareUrl();
       let copied = false;
       if (navigator.clipboard?.writeText) {
         try {
@@ -2321,25 +2355,19 @@ function bindCopyLink() {
       }
 
       // Visual feedback
-      const originalText = $btnCopyLink.innerHTML;
-      $btnCopyLink.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-          <path d="M3 8l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Copied!
-      `;
-      $btnCopyLink.classList.add('btn--success');
-
-      setTimeout(() => {
-        $btnCopyLink.innerHTML = originalText;
-        $btnCopyLink.classList.remove('btn--success');
-      }, 2000);
-
+      closeShareMenu();
       showAlert('Meeting link copied to clipboard!', 'info');
     } catch (err) {
       console.error('[app] Copy failed:', err);
       showAlert('Failed to copy link. Please copy the URL manually.', 'warn');
     }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!$shareOptions.hidden && !event.target.closest('.share-menu')) closeShareMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeShareMenu();
   });
 }
 

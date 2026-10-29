@@ -1679,6 +1679,20 @@ body {
     justify-content: center;
   }
 
+  .share-menu {
+    flex: 1 1 auto;
+  }
+
+  .share-menu > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .share-options {
+    right: auto;
+    left: 0;
+  }
+
   .stage-grid { gap: var(--sp-3); }
 
   .peer-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1925,6 +1939,50 @@ body {
 .btn-ghost:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.share-menu {
+  position: relative;
+}
+
+.share-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 120;
+  display: grid;
+  min-width: 190px;
+  padding: var(--sp-2);
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+}
+
+.share-options[hidden] { display: none; }
+
+.share-options button,
+.share-options a {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: 500 0.78rem var(--font-ui);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.share-options button:hover,
+.share-options a:hover,
+.share-options button:focus-visible,
+.share-options a:focus-visible {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .btn[hidden],
