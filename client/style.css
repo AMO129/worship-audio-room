@@ -488,6 +488,29 @@ body {
   min-width: 0;
 }
 
+/* The meeting stage is a narrow grid column when chat is visible. Keep its
+   title and action controls on separate rows instead of compressing text. */
+.meeting-stage > .section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-3);
+}
+
+.meeting-stage > .section-header .section-title {
+  min-width: 0;
+}
+
+.meeting-stage > .section-header .stage-header-actions {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.meeting-stage > .section-header .stage-header-actions .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
 .screen-share-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
