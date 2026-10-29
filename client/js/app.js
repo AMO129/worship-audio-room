@@ -1724,7 +1724,8 @@ async function handleJoinRoom() {
     console.error('[app] Join room failed:', err);
     webrtcClient.leave();
     const roomClosed = err?.message === 'This room is no longer accepting new guests.'
-      || err?.message === 'The host left before you were admitted.';
+      || err?.message === 'The host left before you were admitted.'
+      || err?.message === 'This meeting link is no longer valid.';
     showAlert(
       roomClosed ? err.message : `Could not connect to room "${roomId}". Is the server running?`,
       roomClosed ? 'warn' : 'error',

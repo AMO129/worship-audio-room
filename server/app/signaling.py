@@ -49,7 +49,7 @@ class ConnectionManager:
         self.room_host_users: Dict[str, str] = {}
         self.waiting: Dict[str, Dict[str, tuple[WebSocket, str, str]]] = {}
         self.kicked_users: Dict[str, set[str]] = {}
-        self.closed_to_new_guests: set[str] = set()
+        self.invalidated_rooms: set[str] = set()
 
     # ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -79,6 +79,14 @@ class ConnectionManager:
             "".join(char for char in display_name if char.isprintable()).split()
         )[:24] or "Guest"
 
+        if room_id in self.invalidated_rooms:
+            await self._send(websocket, {
+                "type": "room-invalid",
+                "message": "This meeting link is no longer valid.",
+            })
+            await websocket.close(code=4004, reason="Meeting link is invalid")
+            return
+
         room = self.rooms.get(room_id)
         if room:
             if user_id and user_id in self.kicked_users.get(room_id, set()):
@@ -95,7 +103,6 @@ class ConnectionManager:
                 and user_id == self.room_host_users.get(room_id)
                 and not existing_id
             ):
-                self.closed_to_new_guests.discard(room_id)
                 room[client_id] = websocket
                 self.peer_names.setdefault(room_id, {})[client_id] = clean_name
                 self.peer_users.setdefault(room_id, {})[client_id] = user_id
@@ -125,12 +132,12 @@ class ConnectionManager:
                     "muted_peers": list(self.muted_peers.get(room_id, set())),
                 })
                 return
-            if room_id in self.closed_to_new_guests:
+            if room_id in self.invalidated_rooms:
                 await self._send(websocket, {
-                    "type": "room-closed",
-                    "message": "This room is no longer accepting new guests.",
+                    "type": "room-invalid",
+                    "message": "This meeting link is no longer valid.",
                 })
-                await websocket.close(code=4004, reason="Room is closed to new guests")
+                await websocket.close(code=4004, reason="Meeting link is invalid")
                 return
             waiting = self.waiting.setdefault(room_id, {})
             waiting[client_id] = (websocket, clean_name, user_id)
@@ -149,7 +156,6 @@ class ConnectionManager:
         users = self.peer_users.setdefault(room_id, {})
         self.room_hosts[room_id] = client_id
         self.room_host_users[room_id] = user_id
-        self.closed_to_new_guests.discard(room_id)
         muted_peers = self.muted_peers.setdefault(room_id, set())
 
         # Register newcomer
@@ -313,6 +319,8 @@ class ConnectionManager:
         self.muted_peers.get(room_id, set()).discard(client_id)
 
         if not room:
+            if was_host:
+                self.invalidated_rooms.add(room_id)
             self.rooms.pop(room_id, None)
             self.peer_names.pop(room_id, None)
             self.peer_users.pop(room_id, None)
@@ -320,11 +328,10 @@ class ConnectionManager:
             self.room_hosts.pop(room_id, None)
             self.room_host_users.pop(room_id, None)
             self.kicked_users.pop(room_id, None)
-            self.closed_to_new_guests.discard(room_id)
             logger.info("Room '%s' is empty — removed.", room_id)
         else:
             if was_host:
-                self.closed_to_new_guests.add(room_id)
+                self.invalidated_rooms.add(room_id)
                 self.room_host_users[room_id] = departing_user
                 self.room_hosts[room_id] = next(iter(room))
                 waiting = self.waiting.pop(room_id, {})
@@ -371,7 +378,7 @@ class ConnectionManager:
             await self._send(ws, payload)
 
         new_host = self.room_hosts.get(room_id)
-        if new_host and new_host != client_id and room_id not in self.closed_to_new_guests:
+        if new_host and new_host != client_id and room_id not in self.invalidated_rooms:
             host_socket = room.get(new_host)
             if host_socket:
                 for waiting_id, (_, waiting_name, _) in self.waiting.get(room_id, {}).items():

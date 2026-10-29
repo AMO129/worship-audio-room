@@ -341,6 +341,12 @@ export class WebRTCManager {
         this._settleJoin?.(new Error(msg.message || 'This room is closed to new guests.'));
         this.onRoomClosed?.(msg.message || 'This room is closed to new guests.');
         break;
+      case 'room-invalid':
+        this._isAdmitted = false;
+        this._shouldReconnect = false;
+        this._settleJoin?.(new Error(msg.message || 'This meeting link is no longer valid.'));
+        this.onRoomClosed?.(msg.message || 'This meeting link is no longer valid.');
+        break;
       case 'room-users':    this._onRoomUsers(msg);        break;
       case 'peer-joined':   this._onPeerJoined(msg);       break;
       case 'participant-renamed': this._onPeerRenamed(msg); break;

@@ -91,6 +91,11 @@ updated name to all room members. Host removal is tied to the authenticated
 account and blocks that account from rejoining the active room without a new
 admission.
 
+Meeting links are single-use room links: when the host leaves, the room ID is
+invalidated permanently for the running service process. Existing admitted
+participants may finish their session, but the link cannot create or join a
+new room afterward.
+
 ### TURN Relay
 
 Direct WebRTC uses public Google STUN servers by default. For networks that block direct peer connections, configure a TURN provider that supports coturn REST/shared-secret credentials:
