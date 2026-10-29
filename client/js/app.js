@@ -1496,81 +1496,82 @@ function bindScreenShare() {
         showAlert('Could not start screen sharing. Check browser permissions and try again.', 'warn');
       }
 
-      function bindCaptions() {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-          $btnToggleCaptions.title = 'Captions are not supported by this browser';
-          return;
-        }
-        $btnToggleCaptions.disabled = false;
-        $btnToggleCaptions.addEventListener('click', () => {
-          if (captionsActive) {
-            stopCaptions();
-          } else {
-            startCaptions(SpeechRecognition);
-          }
-        });
-      }
-
-      function startCaptions(SpeechRecognition) {
-        captionRecognition = new SpeechRecognition();
-        captionRecognition.continuous = true;
-        captionRecognition.interimResults = true;
-        captionRecognition.lang = navigator.language || 'en-US';
-        captionRecognition.onresult = (event) => {
-          for (let index = event.resultIndex; index < event.results.length; index += 1) {
-            const result = event.results[index];
-            const text = result[0]?.transcript?.trim();
-            if (text) webrtcClient.sendCaption(text, result.isFinal);
-          }
-        };
-        captionRecognition.onerror = (event) => {
-          if (event.error !== 'no-speech') {
-            showAlert(`Captions stopped: ${event.error}.`, 'warn');
-            stopCaptions();
-          }
-        };
-        captionRecognition.onend = () => {
-          if (captionsActive) {
-            try { captionRecognition.start(); } catch (_) { /* browser is already restarting */ }
-          }
-        };
-        try {
-          captionRecognition.start();
-          captionsActive = true;
-          $btnToggleCaptions.textContent = 'Stop Captions';
-          $btnToggleCaptions.setAttribute('aria-pressed', 'true');
-          $captionsPanel.hidden = false;
-        } catch (error) {
-          showAlert('Could not start captions. Check microphone permission.', 'warn');
-        }
-      }
-
-      function stopCaptions() {
-        captionsActive = false;
-        captionRecognition?.stop();
-        captionRecognition = null;
-        $btnToggleCaptions.textContent = 'Start Captions';
-        $btnToggleCaptions.setAttribute('aria-pressed', 'false');
-      }
-
-      function renderCaption(message) {
-        if (!message?.text) return;
-        $captionsPanel.hidden = false;
-        const line = document.createElement('div');
-        line.className = 'caption-line';
-        const speaker = document.createElement('strong');
-        speaker.textContent = message.speaker_name || 'Participant';
-        line.append(speaker, document.createTextNode(message.text));
-        $captionsFeed.appendChild(line);
-        while ($captionsFeed.children.length > 30) $captionsFeed.firstElementChild.remove();
-        $captionsFeed.scrollTop = $captionsFeed.scrollHeight;
-      }
     } finally {
       $btnShareScreen.disabled = false;
     }
   });
   $btnStopScreenShare?.addEventListener('click', () => webrtcClient.stopScreenShare());
+}
+
+function bindCaptions() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    $btnToggleCaptions.title = 'Captions are not supported by this browser';
+    return;
+  }
+  $btnToggleCaptions.disabled = false;
+  $btnToggleCaptions.addEventListener('click', () => {
+    if (captionsActive) {
+      stopCaptions();
+    } else {
+      startCaptions(SpeechRecognition);
+    }
+  });
+}
+
+function startCaptions(SpeechRecognition) {
+  captionRecognition = new SpeechRecognition();
+  captionRecognition.continuous = true;
+  captionRecognition.interimResults = true;
+  captionRecognition.lang = navigator.language || 'en-US';
+  captionRecognition.onresult = (event) => {
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const result = event.results[index];
+      const text = result[0]?.transcript?.trim();
+      if (text) webrtcClient.sendCaption(text, result.isFinal);
+    }
+  };
+  captionRecognition.onerror = (event) => {
+    if (event.error !== 'no-speech') {
+      showAlert(`Captions stopped: ${event.error}.`, 'warn');
+      stopCaptions();
+    }
+  };
+  captionRecognition.onend = () => {
+    if (captionsActive) {
+      try { captionRecognition.start(); } catch (_) { /* browser is already restarting */ }
+    }
+  };
+  try {
+    captionRecognition.start();
+    captionsActive = true;
+    $btnToggleCaptions.textContent = 'Stop Captions';
+    $btnToggleCaptions.setAttribute('aria-pressed', 'true');
+    $captionsPanel.hidden = false;
+  } catch (error) {
+    showAlert('Could not start captions. Check microphone permission.', 'warn');
+  }
+}
+
+function stopCaptions() {
+  captionsActive = false;
+  captionRecognition?.stop();
+  captionRecognition = null;
+  $btnToggleCaptions.textContent = 'Start Captions';
+  $btnToggleCaptions.setAttribute('aria-pressed', 'false');
+}
+
+function renderCaption(message) {
+  if (!message?.text) return;
+  $captionsPanel.hidden = false;
+  const line = document.createElement('div');
+  line.className = 'caption-line';
+  const speaker = document.createElement('strong');
+  speaker.textContent = message.speaker_name || 'Participant';
+  line.append(speaker, document.createTextNode(message.text));
+  $captionsFeed.appendChild(line);
+  while ($captionsFeed.children.length > 30) $captionsFeed.firstElementChild.remove();
+  $captionsFeed.scrollTop = $captionsFeed.scrollHeight;
 }
 
 function renderScreenShareTile(peerId, stream, displayName, isLocal) {
