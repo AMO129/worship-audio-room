@@ -14,7 +14,7 @@
  */
 
 import { AudioManager, EngineState } from './AudioManager.js?v=3';
-import { WebRTCManager }              from './WebRTCManager.js?v=11';
+import { WebRTCManager }              from './WebRTCManager.js?v=12';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
