@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Calendar, Captions, Check, ChevronDown, Circle, Copy, Hand, Heart, Info,
   MessageCircle, Mic, MicOff, MonitorUp, Music2, PhoneOff, Play,
@@ -99,8 +99,15 @@ function LandingScreen({ user, onJoin }) {
 }
 
 function ParticipantTile({ participant, muted, mediaRef }) {
+  const hasVideo = participant.video || Boolean(participant.stream?.getVideoTracks?.().length);
+  useEffect(() => {
+    if (mediaRef?.current && participant.stream) {
+      mediaRef.current.srcObject = participant.stream;
+      mediaRef.current.play?.().catch(() => {});
+    }
+  }, [mediaRef, participant.stream]);
   return <article className="relative min-h-40 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
-    {participant.stream && (participant.video ? <video ref={mediaRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" /> : <audio ref={mediaRef} autoPlay playsInline />)}
+    {participant.stream && (hasVideo ? <video ref={mediaRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" /> : <audio ref={mediaRef} autoPlay playsInline />)}
     <div className="absolute inset-0 grid place-items-center"><div className="grid h-20 w-20 place-items-center rounded-full bg-rose text-2xl font-semibold text-white">{initials(participant.name)}</div></div>
     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm"><span>{participant.name}</span>{muted && <MicOff size={15} className="text-red-300" />}</div>
   </article>;
@@ -174,8 +181,8 @@ function App() {
       manager.onStatusChange = (next, text) => { setStatus(next); setNotice(text); };
       manager.onCameraStarted = (stream) => setCameraStream(stream);
       manager.onCameraStopped = () => setCameraStream(null);
-      manager.onPeerJoined = (id, stream, name) => setParticipants((current) => current.some((peer) => peer.id === id) ? current : [...current, { id, name: name || 'Guest', stream, muted: false, audioRef: (node) => { if (node) { node.srcObject = stream; participantRefs.current.set(id, node); } } }]);
-      manager.onRemoteStream = (id, stream) => { setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, stream } : peer)); };
+      manager.onPeerJoined = (id, stream, name) => setParticipants((current) => current.some((peer) => peer.id === id) ? current : [...current, { id, name: name || 'Guest', stream, muted: false, audioRef: { current: null } }]);
+      manager.onRemoteStream = (id, stream) => { setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, stream, video: Boolean(stream.getVideoTracks?.().length) } : peer)); };
       manager.onPeerRenamed = (id, name) => setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, name } : peer));
       manager.onPeerLeft = (id) => setParticipants((current) => current.filter((peer) => peer.id !== id));
       manager.onPeerMuted = (id, muted) => setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, muted } : peer));
