@@ -163,6 +163,13 @@ let activeTrackId = null;
  */
 let currentRoomId = null;
 let authenticatedUser = null;
+const DEFAULT_ROOM_NAME = 'Worship Room';
+const DEFAULT_ROOM_DESCRIPTION = 'Come, let us worship';
+const ROOM_METADATA_KEY = 'worship_room_metadata';
+let currentRoomMetadata = {
+  name: DEFAULT_ROOM_NAME,
+  description: DEFAULT_ROOM_DESCRIPTION,
+};
 
 /**
  * Stores the ?room= param value so we can auto-join after sign-in completes.
@@ -237,6 +244,8 @@ const $roomModeDisplay  = document.getElementById('room-mode-display');
 const $headerRoomName = document.getElementById('header-room-name');
 const $headerHostIndicator = document.getElementById('header-host-indicator');
 const $referenceRoomTitle = document.getElementById('reference-room-title');
+const $stageRoomLabel = document.getElementById('stage-room-label');
+const $stageRoomDescription = document.getElementById('stage-room-description');
 const $referenceRoomCode = document.getElementById('reference-room-code');
 const $btnCopyRoomCode = document.getElementById('btn-copy-room-code');
 const $btnMeetingInfo = document.getElementById('btn-meeting-info');
@@ -265,6 +274,7 @@ const $emojiPicker    = document.getElementById('emoji-picker');
 
 // -- Room sharing --
 const $btnShare       = document.getElementById('btn-share');
+const $btnHeaderInvite = document.getElementById('btn-header-invite');
 const $shareOptions   = document.getElementById('share-options');
 const $shareNative    = document.getElementById('share-native');
 const $shareWhatsapp  = document.getElementById('share-whatsapp');
@@ -272,6 +282,26 @@ const $shareEmail     = document.getElementById('share-email');
 const $btnCopyLink    = document.getElementById('btn-copy-link');
 const $shareEmailAddress = document.getElementById('share-email-address');
 const $btnInviteEmail = document.getElementById('btn-invite-email');
+const $inviteDialog = document.getElementById('invite-dialog');
+const $inviteRoomLink = document.getElementById('invite-room-link');
+const $btnCopyInviteLink = document.getElementById('btn-copy-invite-link');
+const $inviteWhatsapp = document.getElementById('invite-whatsapp');
+const $inviteEmail = document.getElementById('invite-email');
+const $inviteEmailInput = document.getElementById('invite-email-input');
+const $btnSendInvite = document.getElementById('btn-send-invite');
+const $recentInvites = document.getElementById('recent-invites');
+const $meetingLauncher = document.getElementById('meeting-launcher');
+const $btnLaunchInstant = document.getElementById('btn-launch-instant');
+const $btnLaunchScheduled = document.getElementById('btn-launch-scheduled');
+const $btnLaunchScheduleSubmit = document.getElementById('btn-launch-schedule-submit');
+const $launcherScheduleForm = document.getElementById('launcher-schedule-form');
+const $launcherRoomName = document.getElementById('launcher-room-name');
+const $launcherDescription = document.getElementById('launcher-description');
+const $launcherDate = document.getElementById('launcher-date');
+const $launcherTime = document.getElementById('launcher-time');
+const $launcherRoomCode = document.getElementById('launcher-room-code');
+const $btnLaunchJoin = document.getElementById('btn-launch-join');
+const $btnLaunchClose = document.getElementById('btn-launch-close');
 const $btnToggleChat  = document.getElementById('btn-toggle-chat');
 const $btnHeaderChat = document.getElementById('btn-header-chat');
 const $btnHeaderProfile = document.getElementById('btn-header-profile');
@@ -302,7 +332,6 @@ const $btnRaiseHand = document.getElementById('btn-raise-hand');
 const $btnReaction = document.getElementById('btn-reaction');
 const $btnRecord = document.getElementById('btn-record');
 const $btnMuteEveryone = document.getElementById('btn-mute-everyone');
-const $btnMoreControls = document.getElementById('btn-more-controls');
 const $btnControlMic = document.getElementById('btn-control-mic');
 const $btnLeaveDock = document.getElementById('btn-leave-dock');
 const $settingsDialog = document.getElementById('settings-dialog');
@@ -310,7 +339,6 @@ const $btnTestSpeaker = document.getElementById('btn-test-speaker');
 const $settingsMicrophone = document.getElementById('settings-microphone');
 const $settingsSpeaker = document.getElementById('settings-speaker');
 const $settingsCamera = document.getElementById('settings-camera');
-const $moreControlsMenu = document.getElementById('more-controls-menu');
 const $reactionMenu = document.getElementById('reaction-menu');
 const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
 const $btnStageConsole = document.getElementById('btn-stage-console');
@@ -319,8 +347,6 @@ const $audioDeck = document.getElementById('audio-deck');
 const $audioConsoleBackdrop = document.getElementById('audio-console-backdrop');
 const $dockTime = document.getElementById('dock-time');
 const $dockRoomCode = document.getElementById('dock-room-code');
-const $btnHeaderMore = document.getElementById('btn-header-more');
-const $headerMoreMenu = document.getElementById('header-more-menu');
 const $btnBackgroundSound = document.getElementById('btn-background-sound');
 const $consoleMusicLevel = document.getElementById('console-music-level');
 const $consoleVoiceLevel = document.getElementById('console-voice-level');
@@ -373,6 +399,62 @@ function applyDeepLink() {
   return false;
 }
 
+function loadRoomMetadata(roomId) {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(ROOM_METADATA_KEY) || '{}');
+    const metadata = stored[roomId];
+    return {
+      name: metadata?.name?.trim() || DEFAULT_ROOM_NAME,
+      description: metadata?.description?.trim() || DEFAULT_ROOM_DESCRIPTION,
+    };
+  } catch (error) {
+    console.warn('[app] Could not load room metadata:', error);
+    return { name: DEFAULT_ROOM_NAME, description: DEFAULT_ROOM_DESCRIPTION };
+  }
+}
+
+function saveRoomMetadata(roomId, metadata) {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(ROOM_METADATA_KEY) || '{}');
+    stored[roomId] = {
+      name: metadata.name?.trim() || DEFAULT_ROOM_NAME,
+      description: metadata.description?.trim() || DEFAULT_ROOM_DESCRIPTION,
+    };
+    sessionStorage.setItem(ROOM_METADATA_KEY, JSON.stringify(stored));
+  } catch (error) {
+    console.warn('[app] Could not save room metadata:', error);
+  }
+}
+
+function applyRoomMetadata(metadata) {
+  currentRoomMetadata = {
+    name: metadata.name?.trim() || DEFAULT_ROOM_NAME,
+    description: metadata.description?.trim() || DEFAULT_ROOM_DESCRIPTION,
+  };
+  if ($referenceRoomTitle) $referenceRoomTitle.textContent = currentRoomMetadata.name;
+  if ($stageRoomLabel) $stageRoomLabel.textContent = currentRoomMetadata.name;
+  if ($stageRoomDescription) $stageRoomDescription.textContent = currentRoomMetadata.description;
+  if ($meetingInfoRoom) $meetingInfoRoom.textContent = currentRoomMetadata.name;
+}
+
+function showMeetingLauncher() {
+  if (!$meetingLauncher || currentRoomId || pendingRoomId) return;
+  let active = null;
+  try {
+    active = JSON.parse(sessionStorage.getItem('worship_active_room') || 'null');
+  } catch (error) {
+    console.warn('[app] Could not restore active room context:', error);
+  }
+  $launcherRoomName.value = active?.metadata?.name || DEFAULT_ROOM_NAME;
+  $launcherDescription.value = active?.metadata?.description || DEFAULT_ROOM_DESCRIPTION;
+  if (active?.roomId) $launcherRoomCode.value = active.roomId;
+  $meetingLauncher.hidden = false;
+}
+
+function hideMeetingLauncher() {
+  if ($meetingLauncher) $meetingLauncher.hidden = true;
+}
+
 function resetChatFeed() {
   $chatMessages.innerHTML = `
     <div class="chat-empty">
@@ -404,6 +486,25 @@ function bindPlayPause() {
 }
 
 function bindCollaborationTools() {
+  $btnHeaderInvite?.addEventListener('click', openInviteDialog);
+  $btnShare?.addEventListener('click', openInviteDialog);
+  $btnCopyInviteLink?.addEventListener('click', () => {
+    copyInviteLink().catch(error => {
+      console.error('[app] Invite link copy failed:', error);
+      showAlert('Could not copy the room link.', 'warn');
+    });
+  });
+  $btnSendInvite?.addEventListener('click', () => {
+    const email = $inviteEmailInput.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showAlert('Enter a valid email address first.', 'warn');
+      return;
+    }
+    const contacts = JSON.parse(sessionStorage.getItem('worship_recent_invites') || '[]');
+    sessionStorage.setItem('worship_recent_invites', JSON.stringify([email, ...contacts.filter(item => item !== email)].slice(0, 5)));
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(`Join my Worship Room: ${$inviteRoomLink.value}`)}`;
+    renderRecentInvites();
+  });
   $btnCopyRoomCode?.addEventListener('click', async () => {
     const code = currentRoomId || $roomIdInput?.value.trim();
     if (!code) return;
@@ -414,31 +515,10 @@ function bindCollaborationTools() {
       console.warn('[app] Could not copy room code:', error);
       showAlert('Could not copy the room code.', 'warn');
     }
+
   });
   $btnControlMic?.addEventListener('click', () => $btnEngineToggle?.click());
   $btnLeaveDock?.addEventListener('click', () => $btnLeave?.click());
-  document.querySelectorAll('[data-dock-action]').forEach(button => {
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      if (button.dataset.dockAction === 'settings') openSettingsDialog();
-      if (button.dataset.dockAction === 'meeting-info') {
-        $meetingInfoPanel.hidden = false;
-        $headerParticipantsPanel.hidden = true;
-        $btnMeetingInfo?.setAttribute('aria-expanded', 'true');
-        $btnHeaderParticipants?.setAttribute('aria-expanded', 'false');
-      }
-      if (button.dataset.dockAction === 'participants') {
-        renderHeaderParticipants();
-        $headerParticipantsPanel.hidden = false;
-        $meetingInfoPanel.hidden = true;
-        $btnHeaderParticipants?.setAttribute('aria-expanded', 'true');
-        $btnMeetingInfo?.setAttribute('aria-expanded', 'false');
-      }
-      if (button.dataset.dockAction === 'share') openShareMenu();
-      $moreControlsMenu.hidden = true;
-      $btnMoreControls.setAttribute('aria-expanded', 'false');
-    });
-  });
   $btnTestSpeaker?.addEventListener('click', () => showAlert('Speaker test tone is ready when an audio output is connected.', 'info'));
   const closeHeaderPopovers = (except) => {
     [$meetingInfoPanel, $headerParticipantsPanel].forEach(panel => {
@@ -501,10 +581,6 @@ function bindCollaborationTools() {
     showAlert('Everyone has been muted.', 'info');
   });
   $btnRecord?.addEventListener('click', toggleLocalRecording);
-  $btnMoreControls?.addEventListener('click', () => {
-    $moreControlsMenu.hidden = !$moreControlsMenu.hidden;
-    $btnMoreControls.setAttribute('aria-expanded', String(!$moreControlsMenu.hidden));
-  });
   $btnToggleAudioConsole?.addEventListener('click', () => {
     const open = !$audioDeck.classList.contains('audio-deck--open');
     $audioDeck.classList.toggle('audio-deck--open', open);
@@ -519,34 +595,6 @@ function bindCollaborationTools() {
     if (event.key === 'Escape' && $audioDeck.classList.contains('audio-deck--open')) {
       $btnToggleAudioConsole.click();
     }
-  });
-  $btnHeaderMore?.addEventListener('click', () => {
-    $headerMoreMenu.hidden = !$headerMoreMenu.hidden;
-    $btnHeaderMore.setAttribute('aria-expanded', String(!$headerMoreMenu.hidden));
-  });
-  $headerMoreMenu?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const target = event.target.closest('[data-header-action]');
-    const action = target?.dataset.headerAction;
-    if (!action) return;
-    if (action === 'console') $btnToggleAudioConsole.click();
-    if (action === 'settings') openSettingsDialog();
-    if (action === 'meeting-info') {
-      $meetingInfoPanel.hidden = false;
-      $headerParticipantsPanel.hidden = true;
-      $btnMeetingInfo?.setAttribute('aria-expanded', 'true');
-      $btnHeaderParticipants?.setAttribute('aria-expanded', 'false');
-    }
-    if (action === 'participants') {
-      renderHeaderParticipants();
-      $headerParticipantsPanel.hidden = false;
-      $meetingInfoPanel.hidden = true;
-      $btnHeaderParticipants?.setAttribute('aria-expanded', 'true');
-      $btnMeetingInfo?.setAttribute('aria-expanded', 'false');
-    }
-    if (action === 'share') openShareMenu();
-    $headerMoreMenu.hidden = true;
-    $btnHeaderMore.setAttribute('aria-expanded', 'false');
   });
   $btnBackgroundSound?.addEventListener('click', () => {
     const enabled = $btnBackgroundSound.getAttribute('aria-checked') !== 'true';
@@ -572,6 +620,58 @@ function bindCollaborationTools() {
       playProceduralTrack(definition);
     });
   });
+}
+
+function renderRecentInvites() {
+  if (!$recentInvites) return;
+  const contacts = JSON.parse(sessionStorage.getItem('worship_recent_invites') || '[]');
+  $recentInvites.replaceChildren();
+  if (!contacts.length) return;
+  const heading = document.createElement('span');
+  heading.className = 'recent-invites-heading';
+  heading.textContent = 'Recent contacts';
+  $recentInvites.appendChild(heading);
+  contacts.slice(0, 5).forEach(email => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'recent-invite';
+    button.textContent = email;
+    button.addEventListener('click', () => { $inviteEmailInput.value = email; });
+    $recentInvites.appendChild(button);
+  });
+}
+
+function openInviteDialog() {
+  if (!$inviteDialog) return;
+  const roomId = currentRoomId || $roomIdInput?.value.trim() || 'worship-room';
+  const link = getMeetingShareUrl(roomId);
+  const message = `Join my Worship Room: ${link}`;
+  $inviteRoomLink.value = link;
+  $inviteWhatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  $inviteEmail.href = `mailto:?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
+  renderRecentInvites();
+  if (!$inviteDialog.open) $inviteDialog.showModal();
+}
+
+async function copyInviteLink() {
+  const link = $inviteRoomLink.value;
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch {
+    const field = document.createElement('textarea');
+    field.value = link;
+    field.style.position = 'fixed';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    if (!document.execCommand('copy')) {
+      field.remove();
+      throw new Error('Clipboard copy failed');
+    }
+    field.remove();
+  }
+  $btnCopyInviteLink.textContent = 'Copied!';
+  setTimeout(() => { $btnCopyInviteLink.textContent = 'Copy Room Link'; }, 1400);
 }
 
 function bindConsoleSlider(input, onChange) {
@@ -834,7 +934,6 @@ async function bootstrap() {
   bindCamera();
   bindCaptions();
   bindChatVisibility();
-  bindShareMenu();
   bindChat();
   bindPlayPause();
   bindCollaborationTools();
@@ -916,7 +1015,7 @@ async function initGoogleSignIn() {
 
     google.accounts.id.renderButton($googleSigninBtn, {
       type:  'standard',
-      theme: 'filled_blue',
+      theme: 'filled_black',
       size:  'large',
       shape: 'pill',
       text:  'signin_with',
@@ -1015,6 +1114,8 @@ function onAuthSuccess() {
     pendingRoomId = null;
     $roomIdInput.value = roomToJoin;
     handleJoinRoom();
+  } else {
+    showMeetingLauncher();
   }
 }
 
@@ -1120,6 +1221,8 @@ async function refreshAuthentication() {
       $roomIdInput.value = roomToJoin;
       // Defer join to after all bindings complete
       setTimeout(() => handleJoinRoom(), 0);
+    } else {
+      showMeetingLauncher();
     }
     return;
   }
@@ -1144,6 +1247,8 @@ async function refreshAuthentication() {
         pendingRoomId = null;
         $roomIdInput.value = roomToJoin;
         setTimeout(() => handleJoinRoom(), 0);
+      } else {
+        showMeetingLauncher();
       }
       return;
     }
@@ -1902,6 +2007,68 @@ function bindRoomControls() {
   $roomIdInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleJoinRoom();
   });
+  bindMeetingLauncher();
+}
+
+function createRoomId(name) {
+  const slug = (name || DEFAULT_ROOM_NAME).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
+  return `${slug || 'worship-room'}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+function bindMeetingLauncher() {
+  $btnLaunchInstant?.addEventListener('click', () => {
+    const roomId = createRoomId($launcherRoomName?.value);
+    const metadata = {
+      name: $launcherRoomName?.value.trim() || DEFAULT_ROOM_NAME,
+      description: $launcherDescription?.value.trim() || DEFAULT_ROOM_DESCRIPTION,
+    };
+    saveRoomMetadata(roomId, metadata);
+    applyRoomMetadata(metadata);
+    $roomIdInput.value = roomId;
+    hideMeetingLauncher();
+    handleJoinRoom();
+  });
+  $btnLaunchScheduled?.addEventListener('click', () => {
+    $launcherScheduleForm.hidden = !$launcherScheduleForm.hidden;
+    if (!$launcherScheduleForm.hidden) {
+      const start = new Date(Date.now() + 30 * 60 * 1000);
+      $launcherDate.value = start.toISOString().slice(0, 10);
+      $launcherTime.value = start.toTimeString().slice(0, 5);
+      $launcherRoomName.focus();
+    }
+  });
+  $btnLaunchScheduleSubmit?.addEventListener('click', () => {
+    const roomId = createRoomId($launcherRoomName.value);
+    const metadata = {
+      name: $launcherRoomName.value.trim() || DEFAULT_ROOM_NAME,
+      description: $launcherDescription.value.trim() || DEFAULT_ROOM_DESCRIPTION,
+    };
+    saveRoomMetadata(roomId, metadata);
+    applyRoomMetadata(metadata);
+    sessionStorage.setItem(`worship_schedule_${roomId}`, JSON.stringify({
+      date: $launcherDate.value,
+      time: $launcherTime.value,
+    }));
+    $roomIdInput.value = roomId;
+    hideMeetingLauncher();
+    handleJoinRoom();
+  });
+  $btnLaunchJoin?.addEventListener('click', () => {
+    const value = $launcherRoomCode.value.trim();
+    if (!value) {
+      $launcherRoomCode.focus();
+      return;
+    }
+    try {
+      const parsed = new URL(value, window.location.origin);
+      $roomIdInput.value = parsed.searchParams.get('room') || value;
+    } catch {
+      $roomIdInput.value = value;
+    }
+    hideMeetingLauncher();
+    handleJoinRoom();
+  });
+  $btnLaunchClose?.addEventListener('click', hideMeetingLauncher);
 }
 
 function bindChatVisibility() {
@@ -2137,7 +2304,8 @@ async function handleJoinRoom() {
   setConnectionStatus('disconnected', 'Connecting…');
 
   try {
-    resetChatFeed();
+    currentRoomMetadata = loadRoomMetadata(roomId);
+    applyRoomMetadata(currentRoomMetadata);
     // Pass the live AudioManager stream (if available) so WebRTCManager can
     // attach it immediately to any peer connections it creates.
     const userName = ($chatUsername?.value || authenticatedUser.name || authenticatedUser.email || 'Participant').trim();
@@ -2145,6 +2313,11 @@ async function handleJoinRoom() {
     const joinState = await webrtcClient.join(roomId, audioManager, userName);
 
     currentRoomId = roomId;
+    sessionStorage.setItem('worship_active_room', JSON.stringify({
+      roomId,
+      metadata: currentRoomMetadata,
+      userName,
+    }));
     updateHostControls();
 
     // Push room to URL for deep linking / sharing
@@ -2202,7 +2375,7 @@ function completeRoomJoin() {
   $roomModeDisplay.textContent = 'Live';
   $headerRoomName.textContent = currentRoomId || 'Room';
   if ($referenceRoomCode) $referenceRoomCode.textContent = currentRoomId || 'grace-194';
-  if ($referenceRoomTitle) $referenceRoomTitle.textContent = currentRoomId || 'Grace House Gathering';
+  applyRoomMetadata(currentRoomMetadata);
   if ($dockRoomCode) $dockRoomCode.textContent = currentRoomId || 'grace-194';
   $signalQuality.textContent = 'Excellent';
   $signalQuality.className = 'stage-info-value stage-info-value--good';
@@ -2277,7 +2450,7 @@ function handleLeaveRoom() {
   $localCameraVideo.srcObject = null;
   $localCameraVideo.hidden = true;
   if ($referenceRoomCode) $referenceRoomCode.textContent = 'grace-194';
-  if ($referenceRoomTitle) $referenceRoomTitle.textContent = 'Grace House Gathering';
+  applyRoomMetadata({ name: DEFAULT_ROOM_NAME, description: DEFAULT_ROOM_DESCRIPTION });
   if ($dockRoomCode) $dockRoomCode.textContent = 'grace-194';
 
   // Reset URL
@@ -2292,6 +2465,7 @@ function handleLeaveRoom() {
   $btnEmojiPicker?.setAttribute('aria-expanded', 'false');
 
   currentRoomId = null;
+  sessionStorage.removeItem('worship_active_room');
 
   // Remove all dynamically added remote peer cards
   for (const [peerId] of peerElements) {
@@ -2677,7 +2851,7 @@ function showAlert(message, type = 'info') {
       from { opacity: 0; transform: translateX(-50%) translateY(12px); }
       to   { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
-    .app-alert--info  { background: #1e293b; color: #38bdf8; border-color: rgba(56,189,248,0.25); }
+    .app-alert--info  { background: #28241d; color: #d4af37; border-color: rgba(212,175,55,0.25); }
     .app-alert--warn  { background: #1e2010; color: #f59e0b; border-color: rgba(245,158,11,0.3); }
     .app-alert--error { background: #200f0f; color: #ef4444; border-color: rgba(239,68,68,0.3); }
     .app-alert-close  {

@@ -11,12 +11,12 @@
    ══════════════════════════════════════════════════════════════════════════ */
 :root {
   /* ── Color Palette ──────────────────────────────────────────────────────── */
-  --bg-app:       #0b0f19;
-  --bg-panel:     #161f30;
-  --bg-deck:      #1e293b;
-  --bg-elevated:  #243044;
-  --bg-hover:     rgba(255,255,255,0.04);
-  --bg-active:    rgba(56,189,248,0.08);
+  --bg-app:       #121214;
+  --bg-panel:     #1a1918;
+  --bg-deck:      #211f1a;
+  --bg-elevated:  #28241d;
+  --bg-hover:     rgba(212,175,55,0.08);
+  --bg-active:    rgba(212,175,55,0.15);
 
   /* Borders */
   --border-subtle:  rgba(255,255,255,0.06);
@@ -24,9 +24,9 @@
   --border-strong:  rgba(255,255,255,0.18);
 
   /* Accent Colors */
-  --blue:      #38bdf8;
-  --blue-dim:  rgba(56,189,248,0.15);
-  --blue-glow: rgba(56,189,248,0.30);
+  --blue:      #d4af37;
+  --blue-dim:  rgba(212,175,55,0.15);
+  --blue-glow: rgba(212,175,55,0.30);
 
   --emerald:      #10b981;
   --emerald-dim:  rgba(16,185,129,0.15);
@@ -47,7 +47,7 @@
   --text-primary:   #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted:     #475569;
-  --text-accent:    #38bdf8;
+  --text-accent:    #d4af37;
 
   /* Typography */
   --font-ui:   'Inter', system-ui, -apple-system, sans-serif;
@@ -1201,7 +1201,7 @@ body {
   opacity: 0.8;
   z-index: 1;
 }
-.vu-tick--speech { background: #60a5fa; }
+.vu-tick--speech { background: #d4af37; }
 .vu-tick--climax-exit { background: #fbbf24; }
 .vu-tick--climax-enter { background: #ef4444; }
 
@@ -1290,8 +1290,8 @@ body {
 }
 
 /* Blue variant */
-.deck-slider--blue { accent-color: var(--blue); }
-.deck-slider--blue::-webkit-slider-thumb { background: var(--blue); }
+.deck-slider--blue { accent-color: #d4af37; }
+.deck-slider--blue::-webkit-slider-thumb { background: #d4af37; }
 .deck-slider--blue:focus { box-shadow: var(--shadow-glow-blue); }
 
 /* Amber variant */
@@ -1655,7 +1655,7 @@ body {
   box-shadow: var(--shadow-glow-blue);
 }
 
-.drop-zone.drag-over { box-shadow: 0 0 0 2px var(--blue-glow), inset 0 0 24px rgba(56,189,248,0.06); }
+.drop-zone.drag-over { box-shadow: 0 0 0 2px var(--blue-glow), inset 0 0 24px rgba(212,175,55,0.06); }
 
 .file-input-hidden {
   position: absolute;
@@ -1944,8 +1944,8 @@ body {
     --text-primary: #f5edf4;
     --text-secondary: #b7a9b5;
     --text-muted: #806f7f;
-    --blue: #d7a8c5;
-    --blue-dim: rgba(215, 168, 197, .15);
+    --blue: #d4af37;
+    --blue-dim: rgba(212, 175, 55, .15);
     --amber: #e7bd72;
     --emerald: #9ac6b1;
     --header-h: 94px;
@@ -2031,12 +2031,7 @@ body {
     letter-spacing: 0;
   }
   .meeting-stage > .section-header .section-title::before {
-    content: 'WORSHIP SESSION';
-    display: block;
-    margin-bottom: 5px;
-    color: #a77a9c;
-    font-size: .68rem;
-    letter-spacing: .16em;
+    content: none;
   }
   .meeting-stage > .section-header .section-title::after {
     content: 'Come, let us worship';
@@ -2466,7 +2461,7 @@ body {
 }
 
 .chat-bubble-name {
-  color: #38bdf8;
+  color: #d4af37;
   font-weight: 600;
 }
 
@@ -2502,7 +2497,7 @@ body {
 }
 
 .chat-input:focus {
-  border-color: #38bdf8;
+  border-color: #d4af37;
 }
 
 .chat-input:disabled {
@@ -2833,13 +2828,7 @@ body {
     text-transform: none;
   }
   .meeting-stage > .section-header .section-title::before {
-    content: 'Worship session';
-    display: block;
-    margin-bottom: 7px;
-    color: #a77a9c;
-    font-size: .68rem;
-    letter-spacing: .16em;
-    text-transform: uppercase;
+    content: none;
   }
   .meeting-stage > .section-header .section-title::after {
     content: 'Come, let us worship';
@@ -3166,7 +3155,7 @@ body {
   .meeting-stage { min-width: 0; padding: 0; gap: 14px; background: transparent; border: 0; }
   .meeting-stage > .section-header { display: flex; align-items: flex-end; margin: 0; min-height: 56px; }
   .meeting-stage > .section-header .section-title { display: block; font-size: 0; letter-spacing: 0; text-transform: none; }
-  .meeting-stage > .section-header .section-title::before { content: 'WORSHIP SESSION'; display: block; margin-bottom: 5px; color: #a77a9c; font-size: .68rem; letter-spacing: .16em; }
+  .meeting-stage > .section-header .section-title::before { content: none; }
   .meeting-stage > .section-header .section-title::after { content: 'Come, let us worship'; display: block; color: #f5edf4; font-size: 1.45rem; letter-spacing: -.03em; }
   .meeting-stage > .section-header .section-title-icon,
   .meeting-stage > .section-header .stage-header-actions { display: none; }
@@ -3460,3 +3449,54 @@ body {
 .share-link-preview { display: grid; gap: 5px; margin: 4px 0 8px; padding: 9px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.035); }
 .share-link-preview span { color: var(--figma-muted); font-size: .64rem; text-transform: uppercase; letter-spacing: .08em; }
 .share-link-preview code { overflow-wrap: anywhere; color: var(--figma-text); font-size: .68rem; line-height: 1.35; }
+
+.meeting-launcher {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18,18,20,.84);
+  backdrop-filter: blur(18px);
+}
+.meeting-launcher[hidden] { display: none; }
+.meeting-launcher-card {
+  width: min(620px, 100%);
+  padding: 32px;
+  border: 1px solid rgba(212,175,55,.28);
+  border-radius: 22px;
+  background: linear-gradient(145deg, #211f1a, #171617);
+  box-shadow: 0 24px 70px rgba(0,0,0,.5);
+}
+.meeting-launcher-card h1 { margin-top: 8px; color: #f8f2e4; font: 650 1.8rem Manrope, sans-serif; }
+.meeting-launcher-copy, .invite-dialog-copy { margin: 8px 0 22px; color: #aaa0ae; }
+.launcher-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.launcher-action { min-height: 108px; padding: 18px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.035); color: #f7f3f0; text-align: left; cursor: pointer; }
+.launcher-action:hover, .launcher-action--primary { border-color: rgba(212,175,55,.55); background: rgba(212,175,55,.12); }
+.launcher-action strong, .launcher-action small { display: block; }
+.launcher-action small { margin-top: 7px; color: #aaa0ae; line-height: 1.4; }
+.launcher-divider { display: flex; align-items: center; gap: 10px; margin: 24px 0 12px; color: #918798; font-size: .72rem; }
+.launcher-divider::before, .launcher-divider::after { content: ''; height: 1px; flex: 1; background: rgba(255,255,255,.1); }
+.launcher-field { display: grid; gap: 6px; margin: 10px 0 6px; color: #aaa0ae; font-size: .74rem; }
+.launcher-join-row, .invite-link-row, .invite-email-row { display: flex; gap: 8px; }
+.launcher-join-row .room-id-input, .invite-link-row input, .invite-email-row .room-id-input { min-width: 0; flex: 1; }
+.launcher-schedule-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
+.launcher-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.launcher-close { display: block; margin: 18px auto 0; }
+.header-invite-btn { white-space: nowrap; }
+.invite-dialog { width: min(540px, calc(100vw - 28px)); padding: 0; border: 1px solid rgba(212,175,55,.3); border-radius: 18px; background: #211f1a; color: #f7f3f0; box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+.invite-dialog::backdrop { background: rgba(18,18,20,.78); backdrop-filter: blur(8px); }
+.invite-dialog-card { display: grid; gap: 12px; padding: 24px; }
+.invite-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; }
+.invite-dialog-header h2 { margin-top: 5px; font: 650 1.4rem Manrope, sans-serif; }
+.invite-link-row input { border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: #121214; color: #d4af37; padding: 10px; font-size: .75rem; }
+.invite-share-row { display: flex; gap: 8px; }
+.recent-invites { display: flex; flex-wrap: wrap; gap: 6px; }
+.recent-invites-heading { width: 100%; color: #918798; font-size: .7rem; }
+.recent-invite { padding: 6px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(212,175,55,.08); color: #f7f3f0; cursor: pointer; }
+@media (max-width: 760px) {
+  .launcher-actions, .launcher-date-row { grid-template-columns: 1fr; }
+  .meeting-launcher-card { padding: 22px; }
+  .header-invite-btn { display: none; }
+}
