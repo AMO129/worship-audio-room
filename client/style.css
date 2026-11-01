@@ -260,7 +260,19 @@ body {
   text-align: left;
   cursor: pointer;
 }
-.header-more-menu button:hover { color: var(--text-primary); background: var(--bg-hover); }
+.header-more-menu button:hover,
+.header-more-menu a:hover { color: var(--text-primary); background: var(--bg-hover); }
+.header-more-menu button strong,
+.header-more-menu a strong { display: block; color: inherit; font-size: .78rem; }
+.header-more-menu button small,
+.header-more-menu a small { display: block; margin-top: 2px; color: var(--text-muted); font-size: .65rem; line-height: 1.35; }
+.header-more-menu a {
+  display: block;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
 
 /* Room Controls */
 .room-controls {
@@ -775,9 +787,9 @@ body {
 }
 
 .console-controls { display: grid; gap: var(--sp-4); padding-bottom: var(--sp-2); border-bottom: 1px solid var(--border-subtle); }
-.console-control-heading, .smart-ducking-card { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
-.console-control-heading strong, .smart-ducking-card strong { display: block; color: var(--text-primary); font-size: .82rem; }
-.console-control-heading span, .smart-ducking-card small { display: block; color: var(--text-muted); font-size: .68rem; }
+.console-control-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.console-control-heading strong { display: block; color: var(--text-primary); font-size: .82rem; }
+.console-control-heading span { display: block; color: var(--text-muted); font-size: .68rem; }
 .switch {
   position: relative;
   width: 36px;
@@ -799,8 +811,6 @@ body {
 .console-mix label { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: var(--text-secondary); font-size: .7rem; }
 .console-mix input { grid-column: 1 / -1; width: 100%; accent-color: var(--amber); }
 .console-mix output { color: var(--text-muted); font: .65rem var(--font-mono); }
-.smart-ducking-card { padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--r-md); background: rgba(255,255,255,.025); color: inherit; text-align: left; cursor: pointer; }
-.smart-ducking-card[aria-checked="true"] { border-color: var(--amber); }
 
 .drawer-backdrop {
   position: fixed;
@@ -1858,10 +1868,347 @@ body {
   }
 }
 
+/* Compact reference-style header utilities and popovers. */
+.header-utility-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.header-icon-btn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+}
+.header-icon-btn:hover,
+.header-icon-btn[aria-expanded="true"] {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+.header-participants-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 10px);
+  left: 0;
+  display: grid;
+  gap: 6px;
+  min-width: 210px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .35);
+  font-size: .78rem;
+}
+.header-popover[hidden] { display: none; }
+.header-popover strong { color: var(--text-primary); font-size: .85rem; }
+.header-popover span { line-height: 1.4; }
+.header-participants-panel { min-width: 180px; }
+.header-participants-panel > div { display: grid; gap: 5px; }
+.header-participants-panel > div span {
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 /* ── Mobile (≤ 768px): Compact adjustments ───────────────────────────────── */
 @media (max-width: 768px) {
   .app-main {
     padding: var(--sp-3) var(--sp-4) var(--sp-3);
+  }
+
+  /* Figma Make reference layout: intimate plum worship room with a featured
+     speaker, compact participant rail, persistent chat, and bottom controls. */
+  :root {
+    --bg-app: #100b14;
+    --bg-panel: #1d1521;
+    --bg-deck: #211824;
+    --bg-elevated: #2a1e2c;
+    --border-subtle: rgba(235, 198, 225, .10);
+    --border-default: rgba(235, 198, 225, .16);
+    --border-strong: rgba(235, 198, 225, .26);
+    --text-primary: #f5edf4;
+    --text-secondary: #b7a9b5;
+    --text-muted: #806f7f;
+    --blue: #d7a8c5;
+    --blue-dim: rgba(215, 168, 197, .15);
+    --amber: #e7bd72;
+    --emerald: #9ac6b1;
+    --header-h: 94px;
+  }
+
+  body { background: #100b14; }
+  .app-header {
+    background: #100b14;
+    border-bottom-color: rgba(235, 198, 225, .08);
+  }
+  .header-inner {
+    max-width: none;
+    padding: 0 30px;
+  }
+  .brand { gap: 14px; }
+  .brand-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 17px;
+    background: linear-gradient(145deg, #34213a, #1d1521);
+    border-color: rgba(231, 189, 114, .45);
+    filter: none;
+  }
+  .brand-text { gap: 0; }
+  .brand-name { font-size: 1.05rem; }
+  .brand-tagline { color: #806f7f; font-size: .75rem; }
+  .room-name-badge { display: none; }
+  .room-controls { gap: 10px; }
+  .room-controls > .room-input-group,
+  .room-controls > #btn-join,
+  .room-controls > #btn-schedule-call,
+  .room-controls > #btn-leave,
+  .room-controls > .share-menu,
+  .room-controls > #btn-toggle-chat { display: none; }
+  .room-controls > .worship-console-trigger {
+    order: 0;
+    min-width: 164px;
+    border-color: rgba(235, 198, 225, .12);
+    background: #1d1521;
+  }
+  .worship-console-trigger strong { color: #e8dce7; }
+  .header-more-menu-wrap { display: none; }
+  .user-profile-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px 4px 4px;
+    border: 1px solid rgba(235, 198, 225, .12);
+    border-radius: 999px;
+    background: #211824;
+  }
+  .account-label, .btn-sign-out { display: none; }
+  .user-avatar { width: 38px; height: 38px; border-radius: 50%; }
+  .status-badge { display: none; }
+
+  .app-main {
+    max-width: none;
+    padding: 24px 30px 18px;
+  }
+  .stage-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 386px;
+    gap: 20px;
+    min-height: calc(100vh - 112px);
+  }
+  .meeting-stage {
+    min-width: 0;
+    padding: 0;
+    gap: 14px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
+  .meeting-stage > .section-header {
+    display: flex;
+    align-items: flex-end;
+    margin: 0;
+    min-height: 56px;
+  }
+  .meeting-stage > .section-header .section-title {
+    display: block;
+    font-size: 0;
+    letter-spacing: 0;
+  }
+  .meeting-stage > .section-header .section-title::before {
+    content: 'WORSHIP SESSION';
+    display: block;
+    margin-bottom: 5px;
+    color: #a77a9c;
+    font-size: .68rem;
+    letter-spacing: .16em;
+  }
+  .meeting-stage > .section-header .section-title::after {
+    content: 'Come, let us worship';
+    display: block;
+    color: #f5edf4;
+    font-size: 1.45rem;
+    letter-spacing: -.03em;
+  }
+  .meeting-stage > .section-header .section-title-icon,
+  .meeting-stage > .section-header .stage-header-actions { display: none; }
+  .peer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 164px;
+    gap: 14px;
+    min-height: 0;
+    overflow: visible;
+  }
+  .peer-card {
+    min-height: 0;
+    padding: 18px 16px;
+    border: 1px solid rgba(235, 198, 225, .10);
+    border-radius: 22px;
+    background: linear-gradient(145deg, #241a27, #1b1420);
+    overflow: hidden;
+  }
+  .peer-card--self {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    height: 338px;
+    justify-content: center;
+    border-color: rgba(231, 189, 114, .48);
+    background: radial-gradient(circle at 30% 20%, #3b263c 0, #241a27 48%, #1b1420 100%);
+  }
+  .peer-card--self .peer-avatar {
+    width: 102px;
+    height: 102px;
+    font-size: 1.35rem;
+  }
+  .peer-card--self .peer-info {
+    position: absolute;
+    left: 16px;
+    bottom: 17px;
+    align-items: flex-start;
+  }
+  .peer-card--self .peer-role { display: none; }
+  .peer-card--remote {
+    grid-row: 2;
+    align-items: flex-start;
+    justify-content: flex-end;
+  }
+  .peer-card--remote .peer-info { align-items: flex-start; }
+  .peer-card--remote .peer-role { display: none; }
+  .peer-card--remote .peer-avatar {
+    position: absolute;
+    inset: 30px auto auto 50%;
+    transform: translateX(-50%);
+    width: 94px;
+    height: 94px;
+  }
+  .peer-card--empty { display: none; }
+  .peer-avatar {
+    width: 58px;
+    height: 58px;
+    border: 0;
+    color: #f8edf7;
+    font-size: 1rem;
+    font-weight: 600;
+    background: linear-gradient(145deg, #a76d8e, #704a69);
+  }
+  .peer-card--remote:nth-child(4n) .peer-avatar { background: linear-gradient(145deg, #4f7890, #29495e); }
+  .peer-card--remote:nth-child(5n) .peer-avatar { background: linear-gradient(145deg, #5f927d, #315c4d); }
+  .peer-video { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; border-radius: inherit; z-index: 1; }
+  .peer-info, .peer-indicators { z-index: 2; }
+  .peer-indicators { bottom: 15px; right: 15px; }
+  .peer-card--self .peer-indicators { bottom: 15px; }
+  .peer-card--self .peer-avatar svg { display: none; }
+  .stage-info-bar { display: none; }
+  .meeting-control-bar {
+    position: sticky;
+    bottom: 12px;
+    z-index: 20;
+    width: max-content;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 10px 14px;
+    border: 1px solid rgba(235, 198, 225, .12);
+    border-radius: 999px;
+    background: rgba(29, 21, 33, .92);
+    box-shadow: 0 8px 28px rgba(0,0,0,.35);
+  }
+  .control-bar-btn {
+    min-width: 38px;
+    height: 38px;
+    padding: 0 12px;
+    border-color: transparent;
+    background: #302333;
+    color: #e7dce6;
+  }
+  .control-bar-btn--danger { background: #b85b65; color: white; }
+  .reaction-menu { background: #2a1e2c; border-color: rgba(235,198,225,.18); }
+
+  .chat-sidebar {
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    border: 1px solid rgba(235,198,225,.10);
+    border-radius: 24px;
+    background: #1d1521;
+  }
+  .chat-sidebar .section-header {
+    min-height: 110px;
+    margin: 0;
+    padding: 26px 26px 18px;
+    border-bottom: 1px solid rgba(235,198,225,.08);
+    align-items: flex-start;
+  }
+  .chat-sidebar .section-title {
+    display: block;
+    color: #f5edf4;
+    font-size: 1.35rem;
+    letter-spacing: -.03em;
+  }
+  .chat-sidebar .section-title::before {
+    content: 'IN-CALL MESSAGES';
+    display: block;
+    margin-bottom: 6px;
+    color: #a77a9c;
+    font-size: .68rem;
+    letter-spacing: .16em;
+  }
+  .chat-sidebar .section-title-icon, #chat-unread-badge { display: none; }
+  .chat-name-row { display: none; }
+  .chat-messages {
+    padding: 26px;
+    gap: 20px;
+    background: transparent;
+  }
+  .chat-empty { display: block; padding: 14px; border-radius: 14px; background: #241a27; color: #a99ba8; text-align: center; }
+  .chat-bubble { background: transparent; padding: 0; border: 0; }
+  .chat-bubble-meta { gap: 8px; }
+  .chat-bubble-name { color: #f0e5ee; }
+  .chat-bubble-time { color: #806f7f; }
+  .chat-bubble-text { color: #c1b4bf; }
+  .chat-bubble-actions { opacity: 0; transition: opacity .15s ease; }
+  .chat-bubble:hover .chat-bubble-actions, .chat-bubble:focus-within .chat-bubble-actions { opacity: 1; }
+  .chat-compose {
+    margin: 0 16px 16px;
+    padding: 8px 8px 8px 16px;
+    border: 1px solid rgba(235,198,225,.12);
+    border-radius: 14px;
+    background: #241a27;
+  }
+  .chat-input { color: #eee2ec; }
+  .chat-send-btn { background: #e7bd72; color: #241a27; border-radius: 10px; }
+  .audio-deck { width: min(390px, calc(100vw - 32px)); background: #1d1521; }
+
+  @media (max-width: 1000px) {
+    .stage-grid { grid-template-columns: 1fr; }
+    .chat-sidebar { min-height: 480px; }
+  }
+  @media (max-width: 680px) {
+    .header-inner { padding: 0 16px; }
+    .brand-text { display: none; }
+    .worship-console-trigger { min-width: 48px; }
+    .worship-console-trigger span:not(.console-trigger-icon) { display: none; }
+    .app-main { padding: 16px; }
+    .peer-card--self { height: 260px; }
+    .peer-grid { grid-auto-rows: 140px; gap: 10px; }
+    .peer-card--remote .peer-avatar { width: 68px; height: 68px; inset: 24px auto auto 50%; }
+    .meeting-control-bar { width: 100%; border-radius: 18px; }
+    .control-bar-btn { flex: 1 1 auto; padding: 0 8px; font-size: .65rem; }
   }
 
   .header-inner {
@@ -2344,6 +2691,513 @@ body {
 .admission-request-actions { display: flex; gap: var(--sp-2); }
 .admission-request-actions .btn { height: 30px; padding: 0 var(--sp-2); font-size: 0.7rem; }
 
+@media (min-width: 769px) {
+  :root {
+    --bg-app: #100b14;
+    --bg-panel: #1d1521;
+    --bg-deck: #211824;
+    --bg-elevated: #2a1e2c;
+    --border-subtle: rgba(235, 198, 225, .10);
+    --border-default: rgba(235, 198, 225, .16);
+    --border-strong: rgba(235, 198, 225, .26);
+    --text-primary: #f5edf4;
+    --text-secondary: #b7a9b5;
+    --text-muted: #806f7f;
+    --amber: #e7bd72;
+    --emerald: #9ac6b1;
+  }
+
+  /* Exact Figma worship-room composition. */
+  :root {
+    --figma-bg: #130f17;
+    --figma-panel: #1d1722;
+    --figma-panel-soft: #241d29;
+    --figma-border: rgba(235, 198, 225, .14);
+    --figma-text: #f5edf4;
+    --figma-muted: #a998a9;
+    --figma-gold: #e7bd72;
+    --figma-rose: #c987a8;
+  }
+  body {
+    background:
+      radial-gradient(circle at 8% 4%, rgba(128, 73, 113, .18), transparent 28%),
+      radial-gradient(circle at 76% 100%, rgba(126, 84, 48, .14), transparent 34%),
+      var(--figma-bg);
+    color: var(--figma-text);
+  }
+  .app-header {
+    height: 76px;
+    background: rgba(19, 15, 23, .96);
+    border-bottom: 1px solid rgba(235, 198, 225, .08);
+    box-shadow: none;
+  }
+  .header-inner {
+    max-width: none;
+    padding: 0 28px;
+    gap: 20px;
+  }
+  .brand { order: 1; gap: 10px; }
+  .brand > .room-name-badge { display: none; }
+  .brand-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    background: #34213a;
+    border-color: rgba(231, 189, 114, .45);
+    filter: none;
+  }
+  .brand-text { gap: 0; }
+  .brand-name { color: var(--figma-text); font-size: .96rem; }
+  .brand-tagline { color: #806f7f; font-size: .68rem; }
+  .reference-room-title {
+    order: 2;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    color: var(--figma-muted);
+    font-size: .72rem;
+  }
+  .reference-room-title .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9ac6b1;
+  }
+  .reference-room-title strong {
+    margin-left: 8px;
+    color: var(--figma-text);
+    font-size: .82rem;
+    font-weight: 600;
+  }
+  .room-code-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 10px;
+    border: 1px solid var(--figma-border);
+    border-radius: 8px;
+    background: #211a26;
+    color: var(--figma-muted);
+    font: 600 .68rem var(--font-mono);
+    cursor: pointer;
+  }
+  .room-code-button:hover { color: var(--figma-text); border-color: rgba(231, 189, 114, .45); }
+  .room-controls > .room-input-group,
+  .room-controls > #btn-join,
+  .room-controls > #btn-schedule-call,
+  .room-controls > .worship-console-trigger,
+  .room-controls > .header-more-menu-wrap,
+  .room-controls > #btn-leave,
+  .room-controls > .share-menu,
+  .room-controls > .status-badge { display: none; }
+  .room-controls { order: 4; gap: 8px; flex: 0 0 auto; justify-content: flex-end; }
+  .user-profile-badge {
+    display: inline-flex;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .user-profile-badge .account-label,
+  .user-profile-badge .btn-sign-out { display: none; }
+  .user-avatar { width: 34px; height: 34px; border: 1px solid rgba(231, 189, 114, .4); }
+  .header-utility-actions { order: 3; margin-left: auto; }
+  .header-icon-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .count-pill { display: grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--figma-gold); color: #251b22; font-size: .64rem; font-weight: 700; }
+  .header-icon-btn {
+    min-width: 36px;
+    height: 36px;
+    border: 0;
+    background: transparent;
+    color: var(--figma-muted);
+    font-size: 1.15rem;
+  }
+  .header-icon-btn:hover,
+  .header-icon-btn[aria-expanded="true"] { background: #241d29; color: var(--figma-text); }
+  .header-popover { top: calc(100% + 8px); background: var(--figma-panel); border-color: var(--figma-border); }
+  #btn-toggle-chat { display: none; }
+  .app-main { max-width: none; padding: 24px 28px 18px; }
+  .stage-grid { display: block; min-height: calc(100vh - 80px); }
+  .meeting-stage { min-width: 0; padding: 0; gap: 16px; background: transparent; border: 0; }
+  .meeting-stage > .section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    min-height: 58px;
+    margin: 0;
+  }
+  .meeting-stage > .section-header .section-title {
+    display: block;
+    font-size: 0;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .meeting-stage > .section-header .section-title::before {
+    content: 'Worship session';
+    display: block;
+    margin-bottom: 7px;
+    color: #a77a9c;
+    font-size: .68rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  .meeting-stage > .section-header .section-title::after {
+    content: 'Come, let us worship';
+    display: block;
+    color: var(--figma-text);
+    font-size: 1.45rem;
+    letter-spacing: -.03em;
+    text-transform: none;
+  }
+  .meeting-stage > .section-header .section-title-icon,
+  .meeting-stage > .section-header .stage-header-actions { display: none; }
+  .console-button-reference {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--figma-border);
+    border-radius: 14px;
+    background: #211a26;
+    color: var(--figma-gold);
+    text-align: left;
+    cursor: pointer;
+  }
+  .console-button-reference strong { display: block; color: var(--figma-text); font-size: .78rem; }
+  .console-button-reference small { display: block; margin-top: 2px; color: var(--figma-muted); font-size: .64rem; }
+  .peer-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr);
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+    height: 520px;
+    gap: 14px;
+    min-height: 0;
+    overflow: visible;
+  }
+  .peer-card {
+    position: relative;
+    min-height: 0;
+    padding: 18px 16px;
+    border: 1px solid var(--figma-border);
+    border-radius: 22px;
+    background: linear-gradient(145deg, #241d29, #1d1722);
+    overflow: hidden;
+  }
+  .peer-card--self {
+    grid-column: 1;
+    grid-row: 1 / 4;
+    height: auto;
+    justify-content: center;
+    border-color: rgba(231, 189, 114, .48);
+    background: radial-gradient(circle at 30% 20%, #3b263c 0, #241d29 48%, #1d1722 100%);
+  }
+  .peer-card--self::before,
+  .peer-card--self::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: .16;
+    pointer-events: none;
+  }
+  .peer-card--self::before { width: 220px; height: 180px; left: 3%; top: -30px; background: #c987a8; }
+  .peer-card--self::after { width: 260px; height: 190px; right: 4%; bottom: -50px; background: #694326; }
+  .peer-card--self .peer-avatar { width: 106px; height: 106px; font-size: 1.2rem; background: linear-gradient(145deg, #b27b3f, #694326); border-color: rgba(231, 189, 114, .55); z-index: 1; }
+  .peer-card--self .peer-info { position: absolute; left: 16px; bottom: 17px; align-items: flex-start; z-index: 2; }
+  .peer-card--self .peer-name { color: var(--figma-text); font-size: .78rem; }
+  .peer-card--self .peer-role { display: none; }
+  .peer-card--remote,
+  .peer-card--empty { grid-column: 2; }
+  .peer-card--remote:nth-child(2),
+  .peer-card--empty:nth-child(2) { grid-row: 1; }
+  .peer-card--remote:nth-child(3),
+  .peer-card--empty:nth-child(3) { grid-row: 2; }
+  .peer-card--remote:nth-child(4),
+  .peer-card--empty:nth-child(4) { grid-row: 3; }
+  .peer-card--remote .peer-avatar { width: 76px; height: 76px; margin: auto; font-size: 1.05rem; }
+  .peer-card--remote .peer-info { position: absolute; left: 16px; bottom: 14px; align-items: flex-start; }
+  .peer-card--remote .peer-role { display: none; }
+  .peer-card--remote:nth-child(2) .peer-avatar { background: linear-gradient(145deg, #a45b7e, #63354f); }
+  .peer-card--remote:nth-child(3) .peer-avatar { background: linear-gradient(145deg, #4f7890, #29495e); }
+  .peer-card--remote:nth-child(4) .peer-avatar { background: linear-gradient(145deg, #5f927d, #315c4d); }
+  .peer-card--empty .peer-waiting-label { color: #806f7f; }
+  .stage-info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    margin-top: 4px;
+    border: 1px solid var(--figma-border);
+    border-radius: 18px;
+    background: rgba(29, 23, 34, .72);
+  }
+  .stage-info-bar > .stage-info-item,
+  .stage-info-bar > .stage-info-divider { display: none; }
+  .meeting-control-bar {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: max-content;
+    padding: 10px 14px;
+    border: 1px solid var(--figma-border);
+    border-radius: 999px;
+    background: rgba(29, 23, 34, .95);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+    margin: 14px auto 0;
+  }
+  .control-group { display: flex; gap: 7px; }
+  .control-bar-btn {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #302333;
+    color: #e7dce6;
+  }
+  .control-bar-btn svg { stroke: currentColor; }
+  .control-bar-btn:hover:not(:disabled),
+  .control-bar-btn[aria-expanded="true"] { background: #49334a; color: var(--figma-text); }
+  .control-bar-btn--danger { width: 62px; border-radius: 22px; background: #b85b65; color: #fff; }
+  .control-bar-btn:disabled { opacity: .45; }
+  .control-bar-btn[hidden] { display: none !important; }
+  .dock-caption { display: inline-flex; align-items: center; gap: 9px; margin-left: 8px; padding-left: 14px; border-left: 1px solid rgba(255,255,255,.1); color: var(--figma-muted); font-size: .68rem; white-space: nowrap; }
+  .dock-caption i { width: 1px; height: 12px; background: rgba(255,255,255,.14); }
+  .reaction-menu { bottom: calc(100% + 12px); background: #241d29; border-color: var(--figma-border); }
+  .more-controls-menu { bottom: calc(100% + 12px); top: auto; right: 0; }
+  .chat-sidebar {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 110;
+    width: min(390px, calc(100vw - 32px));
+    height: calc(100vh - 96px);
+    max-height: calc(100vh - 96px);
+    min-height: 0;
+    align-self: start;
+    border: 1px solid var(--figma-border);
+    border-radius: 22px;
+    background: var(--figma-panel);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .45);
+    grid-column: auto !important;
+  }
+  .chat-sidebar .section-header { min-height: 100px; padding: 24px 26px 18px; border-bottom: 1px solid rgba(235, 198, 225, .08); }
+  .chat-sidebar .section-title { display: block; color: var(--figma-text); font-size: 1.3rem; }
+  .chat-sidebar .section-title::before { content: 'IN-CALL MESSAGES'; display: block; margin-bottom: 6px; color: #a77a9c; font-size: .66rem; letter-spacing: .16em; }
+  .chat-sidebar .section-title-icon, #chat-unread-badge, .chat-name-row { display: none; }
+  .chat-messages { padding: 24px; background: transparent; }
+  .chat-compose { margin: 0 16px 16px; padding: 8px 8px 8px 16px; border: 1px solid var(--figma-border); border-radius: 14px; background: #241d29; }
+  .chat-send-btn { background: var(--figma-gold); color: #241d29; border-radius: 10px; }
+  .audio-deck { width: min(390px, calc(100vw - 32px)); background: var(--figma-panel); }
+  .header-more-menu-wrap { display: none; }
+  .app-footer { display: none; }
+  .audio-deck:not(.audio-deck--open) { display: none !important; }
+  .stage-grid:has(.chat-sidebar:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+  }
+  .stage-grid:has(.audio-deck.audio-deck--open) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 500px;
+    gap: 16px;
+  }
+  .audio-deck.audio-deck--open {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: auto;
+    max-height: calc(100vh - 96px);
+  }
+  .stage-grid:has(.audio-deck.audio-deck--open) .chat-sidebar { display: none; }
+  .panel-close-btn { margin-left: auto; }
+  .more-menu-heading { padding: 10px 12px 8px; }
+  .more-menu-heading strong, .more-menu-heading small { display: block; }
+  .more-menu-heading strong { color: var(--figma-text); font-size: .82rem; }
+  .more-menu-heading small { margin-top: 3px; color: var(--figma-muted); font-size: .68rem; }
+  .more-controls-menu [data-dock-action] { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--figma-text); text-align: left; cursor: pointer; }
+  .more-controls-menu [data-dock-action]:hover { background: #302333; }
+  .more-controls-menu [data-dock-action] small { color: var(--figma-muted); font-size: .66rem; }
+  .settings-dialog { border: 0; padding: 0; background: transparent; color: var(--figma-text); }
+  .settings-dialog::backdrop { background: rgba(8, 5, 10, .72); backdrop-filter: blur(5px); }
+  .settings-dialog-card { display: grid; gap: 16px; width: min(440px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--figma-border); border-radius: 20px; background: var(--figma-panel); box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+  .settings-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; }
+  .settings-dialog-header h2 { margin: 6px 0 0; font-size: 1.15rem; }
+  .settings-dialog-copy { margin: 0; color: var(--figma-muted); font-size: .8rem; }
+  .settings-dialog-card label { display: grid; gap: 7px; color: var(--figma-muted); font-size: .74rem; }
+  .settings-dialog-card select { width: 100%; padding: 11px; border: 1px solid var(--figma-border); border-radius: 9px; background: var(--figma-panel-soft); color: var(--figma-text); }
+  .settings-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+  @media (max-width: 760px) {
+    .app-header { height: auto; min-height: 76px; }
+    .header-inner { flex-wrap: wrap; padding: 10px 14px; gap: 8px; }
+    .brand { min-width: 0; }
+    .brand-icon { width: 40px; height: 40px; }
+    .brand-name { font-size: .88rem; }
+    .reference-room-title { order: 4; width: 100%; justify-content: center; padding-top: 2px; }
+    .reference-room-title strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .header-utility-actions { order: 3; margin-left: auto; }
+    .app-main { padding: 16px 14px 90px; }
+    .stage-grid,
+    .stage-grid:has(.chat-sidebar:not([hidden])),
+    .stage-grid:has(.audio-deck.audio-deck--open) { display: block; }
+    .meeting-stage > .section-header { min-height: 52px; }
+    .meeting-stage > .section-header .section-title::after { font-size: 1.2rem; }
+    .console-button-reference { padding: 8px 10px; }
+    .console-button-reference small { display: none; }
+    .peer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 300px 140px; height: auto; gap: 8px; }
+    .peer-card--self { grid-column: 1 / -1; grid-row: 1; }
+    .peer-card--remote,
+    .peer-card--empty { grid-column: auto; grid-row: 2 !important; }
+    .peer-card--remote .peer-avatar { width: 58px; height: 58px; }
+    .peer-card--remote .peer-info { left: 10px; bottom: 10px; }
+    .peer-card--remote .peer-name { font-size: .68rem; }
+    .stage-info-bar { display: none; }
+    .meeting-control-bar { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 28px); justify-content: center; margin: 0; padding: 8px; }
+    .control-bar-btn { width: 40px; min-width: 40px; height: 40px; }
+    .control-bar-btn--danger { width: 52px; min-width: 52px; }
+    .dock-caption { display: none; }
+    .chat-sidebar {
+      position: fixed;
+      top: auto;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      width: auto;
+      height: min(78vh, 620px);
+      max-height: 78vh;
+      border-radius: 22px 22px 0 0;
+      z-index: 200;
+    }
+
+    /* Figma header profile and session heading */
+    .profile-menu-wrap { position: relative; flex-shrink: 0; }
+    .header-profile-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid rgba(222,181,110,.48);
+      border-radius: 50%;
+      background: linear-gradient(145deg, #d6aa63, #8b5e38);
+      color: #281b1a;
+      font: 700 .72rem var(--font-heading, Manrope, sans-serif);
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .header-profile-btn:hover,
+    .header-profile-btn:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 4px rgba(222,181,110,.14);
+    }
+    .header-profile-menu {
+      position: absolute;
+      top: calc(100% + 10px);
+      right: 0;
+      z-index: 150;
+      min-width: 210px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 14px;
+      background: #251c2b;
+      box-shadow: 0 16px 36px rgba(0,0,0,.32);
+    }
+    .header-profile-menu[hidden] { display: none; }
+    .header-profile-menu strong,
+    .header-profile-menu small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .header-profile-menu strong { color: #f7f3f0; font-size: .8rem; }
+    .header-profile-menu small { margin-top: 3px; color: #aaa0ae; font-size: .68rem; }
+    .header-profile-menu button {
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius: 8px;
+      background: rgba(255,255,255,.04);
+      color: #f7f3f0;
+      text-align: left;
+      cursor: pointer;
+    }
+    .header-profile-menu button:hover { background: rgba(201,137,169,.16); }
+    .stage-session-title { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+    .stage-session-eyebrow { color: #c989a9; font-size: .62rem; font-weight: 700; letter-spacing: .16em; line-height: 1; }
+    .stage-session-name { color: #f7f3f0; font-family: Manrope, var(--font-heading, sans-serif); font-size: 1.15rem; font-weight: 650; letter-spacing: -.025em; line-height: 1.15; }
+    .audio-deck.audio-deck--open {
+      position: fixed;
+      top: auto;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      width: auto;
+      max-height: 82vh;
+      border-radius: 22px 22px 0 0;
+      z-index: 200;
+    }
+    .app-main:has(.chat-sidebar:not([hidden]))::before,
+    .app-main:has(.audio-deck.audio-deck--open)::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 190;
+      background: rgba(8, 5, 10, .56);
+    }
+  }
+  body { background: #100b14; }
+  .app-header { background: #100b14; border-bottom-color: rgba(235, 198, 225, .08); }
+  .header-inner { max-width: none; padding: 0 30px; }
+  .brand { gap: 14px; }
+  .brand-icon { width: 52px; height: 52px; border-radius: 17px; background: linear-gradient(145deg, #34213a, #1d1521); border-color: rgba(231, 189, 114, .45); filter: none; }
+  .brand-tagline { color: #806f7f; font-size: .75rem; }
+  .room-controls .btn-primary { background: #e7bd72; color: #241a27; }
+  .room-controls .btn-danger { background: #b85b65; color: #fff; }
+  .room-controls .btn-ghost { border-color: rgba(235, 198, 225, .12); color: #c1b4bf; }
+  .room-controls .btn-ghost:hover:not(:disabled) { background: #241a27; color: #f5edf4; }
+  .stage-grid { grid-template-columns: minmax(0, 1fr) 386px; gap: 20px; min-height: calc(100vh - 112px); }
+  .meeting-stage { min-width: 0; padding: 0; gap: 14px; background: transparent; border: 0; }
+  .meeting-stage > .section-header { display: flex; align-items: flex-end; margin: 0; min-height: 56px; }
+  .meeting-stage > .section-header .section-title { display: block; font-size: 0; letter-spacing: 0; text-transform: none; }
+  .meeting-stage > .section-header .section-title::before { content: 'WORSHIP SESSION'; display: block; margin-bottom: 5px; color: #a77a9c; font-size: .68rem; letter-spacing: .16em; }
+  .meeting-stage > .section-header .section-title::after { content: 'Come, let us worship'; display: block; color: #f5edf4; font-size: 1.45rem; letter-spacing: -.03em; }
+  .meeting-stage > .section-header .section-title-icon,
+  .meeting-stage > .section-header .stage-header-actions { display: none; }
+  .peer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 164px; gap: 14px; min-height: 0; overflow: visible; }
+  .peer-card { min-height: 0; padding: 18px 16px; border: 1px solid rgba(235, 198, 225, .10); border-radius: 22px; background: linear-gradient(145deg, #241a27, #1b1420); overflow: hidden; }
+  .peer-card--self { grid-column: 1 / -1; grid-row: 1; height: 338px; justify-content: center; border-color: rgba(231, 189, 114, .48); background: radial-gradient(circle at 30% 20%, #3b263c 0, #241a27 48%, #1b1420 100%); }
+  .peer-card--self .peer-avatar { width: 102px; height: 102px; font-size: 1.35rem; }
+  .peer-card--self .peer-info { position: absolute; left: 16px; bottom: 17px; align-items: flex-start; }
+  .peer-card--self .peer-role { display: none; }
+  .peer-card--self .peer-avatar { background: linear-gradient(145deg, #b27b3f, #694326); border-color: rgba(231, 189, 114, .55); }
+  .peer-card--remote .peer-avatar { width: 72px; height: 72px; margin: auto; font-size: 1.1rem; }
+  .peer-card--remote .peer-info { position: absolute; left: 16px; bottom: 14px; align-items: flex-start; }
+  .peer-card--remote .peer-role { display: none; }
+  .peer-card--remote:nth-child(2) .peer-avatar { background: linear-gradient(145deg, #a45b7e, #63354f); }
+  .peer-card--remote:nth-child(3) .peer-avatar { background: linear-gradient(145deg, #4f7890, #29495e); }
+  .peer-card--remote:nth-child(4) .peer-avatar { background: linear-gradient(145deg, #5f927d, #315c4d); }
+  .stage-info-bar { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 2px; }
+  .meeting-control-bar { position: absolute; bottom: 18px; left: 50%; z-index: 20; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid rgba(235, 198, 225, .12); border-radius: 999px; background: rgba(29, 21, 33, .92); box-shadow: 0 8px 28px rgba(0, 0, 0, .35); }
+  .control-bar-btn { min-width: 38px; height: 38px; padding: 0 12px; border-color: transparent; background: #302333; color: #e7dce6; }
+  .control-bar-btn--danger { background: #b85b65; color: white; }
+  .chat-sidebar { min-width: 0; height: 100%; min-height: 0; border: 1px solid rgba(235, 198, 225, .10); border-radius: 24px; background: #1d1521; }
+  .chat-sidebar .section-header { min-height: 110px; margin: 0; padding: 26px 26px 18px; border-bottom: 1px solid rgba(235, 198, 225, .08); align-items: flex-start; }
+  .chat-sidebar .section-title { display: block; color: #f5edf4; font-size: 1.35rem; letter-spacing: -.03em; }
+  .chat-sidebar .section-title::before { content: 'IN-CALL MESSAGES'; display: block; margin-bottom: 6px; color: #a77a9c; font-size: .68rem; letter-spacing: .16em; }
+  .chat-sidebar .section-title-icon, #chat-unread-badge { display: none; }
+  .chat-name-row { display: none; }
+  .chat-messages { padding: 26px; gap: 20px; background: transparent; }
+  .chat-compose { margin: 0 16px 16px; padding: 8px 8px 8px 16px; border: 1px solid rgba(235, 198, 225, .12); border-radius: 14px; background: #241a27; }
+  .chat-send-btn { background: #e7bd72; color: #241a27; border-radius: 10px; }
+}
+
 .status-waiting {
   background: var(--amber-dim);
   color: var(--amber);
@@ -2383,6 +3237,60 @@ body {
 @keyframes authFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+/* Final Figma composition overrides the legacy dashboard layout above. */
+@media (min-width: 769px) {
+  .stage-grid:has(.chat-sidebar:not([hidden])) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 340px !important;
+    gap: 16px !important;
+  }
+  .stage-grid:has(.audio-deck.audio-deck--open) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 500px !important;
+    gap: 16px !important;
+  }
+  .stage-grid:has(.audio-deck.audio-deck--open) .chat-sidebar { display: none !important; }
+  .audio-deck:not(.audio-deck--open) { display: none !important; }
+  .chat-sidebar {
+    position: relative !important;
+    inset: auto !important;
+    grid-column: auto !important;
+    align-self: start !important;
+    height: calc(100vh - 96px) !important;
+    max-height: calc(100vh - 96px) !important;
+  }
+  .audio-deck.audio-deck--open {
+    position: relative !important;
+    inset: auto !important;
+    width: auto !important;
+    max-height: calc(100vh - 96px) !important;
+  }
+  .peer-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr) !important;
+    grid-template-rows: repeat(3, minmax(0, 1fr)) !important;
+    height: 520px !important;
+    grid-auto-rows: unset !important;
+  }
+  .peer-card--self {
+    grid-column: 1 !important;
+    grid-row: 1 / 4 !important;
+    height: auto !important;
+  }
+  .peer-grid > .peer-card:not(.peer-card--self) {
+    grid-column: 2 !important;
+  }
+  .peer-grid > .peer-card:nth-child(2) { grid-row: 1 !important; }
+  .peer-grid > .peer-card:nth-child(3) { grid-row: 2 !important; }
+  .peer-grid > .peer-card:nth-child(4) { grid-row: 3 !important; }
+  .meeting-control-bar {
+    position: relative !important;
+    left: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    margin: 14px auto 0 !important;
+  }
 }
 
 .auth-overlay-card {
@@ -2497,3 +3405,58 @@ body {
   font-size: 0.6875rem;
   border-radius: var(--r-full);
 }
+
+/* Figma header profile and worship-session heading */
+.profile-menu-wrap { position: relative; flex-shrink: 0; }
+.header-profile-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(222,181,110,.48);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #d6aa63, #8b5e38);
+  color: #281b1a;
+  font: 700 .72rem Manrope, sans-serif;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.header-profile-btn:hover,
+.header-profile-btn:focus-visible { transform: translateY(-1px); box-shadow: 0 0 0 4px rgba(222,181,110,.14); }
+.header-profile-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 150;
+  min-width: 210px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: #251c2b;
+  box-shadow: 0 16px 36px rgba(0,0,0,.32);
+}
+.header-profile-menu[hidden] { display: none; }
+.header-profile-menu strong,
+.header-profile-menu small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-profile-menu strong { color: #f7f3f0; font-size: .8rem; }
+.header-profile-menu small { margin-top: 3px; color: #aaa0ae; font-size: .68rem; }
+.header-profile-menu button {
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+  color: #f7f3f0;
+  text-align: left;
+  cursor: pointer;
+}
+.header-profile-menu button:hover { background: rgba(201,137,169,.16); }
+.stage-session-title { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.stage-session-eyebrow { color: #c989a9; font-size: .62rem; font-weight: 700; letter-spacing: .16em; line-height: 1; }
+.stage-session-name { color: #f7f3f0; font-family: Manrope, sans-serif; font-size: 1.15rem; font-weight: 650; letter-spacing: -.025em; line-height: 1.15; }
+.share-link-preview { display: grid; gap: 5px; margin: 4px 0 8px; padding: 9px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.035); }
+.share-link-preview span { color: var(--figma-muted); font-size: .64rem; text-transform: uppercase; letter-spacing: .08em; }
+.share-link-preview code { overflow-wrap: anywhere; color: var(--figma-text); font-size: .68rem; line-height: 1.35; }

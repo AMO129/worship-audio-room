@@ -20,10 +20,10 @@
     <div class="auth-overlay-card">
       <div class="auth-overlay-brand" aria-hidden="true">
         <svg width="40" height="40" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
-          <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-          <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-          <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
+          <circle cx="14" cy="14" r="13" stroke="#e7bd72" stroke-width="1.5"/>
+          <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#e7bd72" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+          <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#c987a8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+          <circle cx="14" cy="14" r="2" fill="#e7bd72" opacity="0.7"/>
         </svg>
       </div>
       <h1 class="auth-overlay-title">Worship Room</h1>
@@ -53,10 +53,10 @@
       <div class="brand" aria-label="Worship Room">
         <div class="brand-icon" aria-hidden="true">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="14" cy="14" r="13" stroke="#38bdf8" stroke-width="1.5"/>
-            <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-            <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#10b981" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-            <circle cx="14" cy="14" r="2" fill="#38bdf8" opacity="0.7"/>
+            <circle cx="14" cy="14" r="13" stroke="#e7bd72" stroke-width="1.5"/>
+            <path d="M8 14 Q10 8 14 11 Q18 14 20 9" stroke="#e7bd72" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <path d="M8 17 Q11 13 14 16 Q17 19 20 14" stroke="#c987a8" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+            <circle cx="14" cy="14" r="2" fill="#e7bd72" opacity="0.7"/>
           </svg>
         </div>
         <div class="room-name-badge">
@@ -66,8 +66,48 @@
         </div>
         <div class="brand-text">
           <span class="brand-name">Worship Room</span>
-          <span class="brand-tagline">Praise, worship, and fellowship</span>
+          <span class="brand-tagline">Evening worship</span>
         </div>
+      </div>
+      <div class="header-utility-actions" aria-label="Meeting details">
+        <button id="btn-meeting-info" class="header-icon-btn" type="button" aria-label="Meeting information" aria-expanded="false" aria-controls="meeting-info-panel">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        </button>
+        <button id="btn-header-participants" class="header-icon-btn header-participants-btn" type="button" aria-label="Show participants" aria-expanded="false" aria-controls="header-participants-panel">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 19c.4-4 2.4-6 6-6s5.6 2 6 6M16 5a3 3 0 010 6M17 13c2.5.4 3.8 2.4 4 5"/></svg><span class="count-pill" id="header-participant-count">1</span>
+        </button>
+        <div id="meeting-info-panel" class="header-popover" hidden>
+          <strong>Worship Room</strong>
+          <span id="meeting-info-room">Lobby</span>
+          <span id="meeting-info-status">Connection: Disconnected</span>
+          <span>Share the room link to invite people.</span>
+        </div>
+        <div id="header-participants-panel" class="header-popover header-participants-panel" hidden>
+          <strong>Participants</strong>
+          <div id="header-participants-list"></div>
+        </div>
+        <button id="btn-header-chat" class="header-icon-btn" type="button" aria-label="Chat" aria-expanded="false" aria-controls="chat-sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a3 3 0 01-3 3H8l-5 3V7a3 3 0 013-3h11a3 3 0 013 3z"/></svg>
+        </button>
+        <div class="profile-menu-wrap">
+          <button id="btn-header-profile" class="header-profile-btn" type="button" aria-label="Open profile" aria-expanded="false" aria-controls="header-profile-menu">
+            <span id="header-profile-initials" aria-hidden="true">GU</span>
+          </button>
+          <div id="header-profile-menu" class="header-profile-menu" hidden>
+            <strong id="header-profile-name">Guest user</strong>
+            <small id="header-profile-email">Sign in to continue</small>
+            <button id="btn-header-sign-out" type="button">Sign out</button>
+          </div>
+        </div>
+      </div>
+      <div class="reference-room-title">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span>Live</span>
+        <strong id="reference-room-title">Grace House Gathering</strong>
+        <button id="btn-copy-room-code" class="room-code-button" type="button" title="Copy room code">
+          <span id="reference-room-code">grace-194</span>
+          <span aria-hidden="true">▣</span>
+        </button>
       </div>
 
       <!-- Room Controls -->
@@ -105,9 +145,11 @@
         <div class="header-more-menu-wrap">
           <button id="btn-header-more" class="btn btn-ghost" type="button" aria-expanded="false" aria-controls="header-more-menu">More</button>
           <div id="header-more-menu" class="header-more-menu" hidden>
-            <button type="button" data-header-action="console">Worship Console</button>
-            <button type="button" data-header-action="settings">Audio and video settings</button>
-            <button type="button" data-header-action="brief">Downloadable design brief</button>
+            <button type="button" data-header-action="console"><strong>Worship Console</strong><small>Background music, ambience and voice levels</small></button>
+            <button type="button" data-header-action="settings"><strong>Audio &amp; video settings</strong><small>Choose your microphone, speaker and camera</small></button>
+            <button type="button" data-header-action="meeting-info"><strong>Meeting information</strong><small>View the room name and connection details</small></button>
+            <button type="button" data-header-action="participants"><strong>People in this room</strong><small>View participants and their current status</small></button>
+            <button type="button" data-header-action="share"><strong>Invite people</strong><small>Copy or share the room link</small></button>
           </div>
         </div>
         <button id="btn-leave" class="btn btn-danger" disabled aria-label="Leave meeting room">
@@ -128,6 +170,10 @@
             Share
           </button>
           <div id="share-options" class="share-options" role="menu" hidden>
+            <div class="share-link-preview">
+              <span>Room link</span>
+              <code id="share-copy-url">http://localhost:8000/?room=grace-194</code>
+            </div>
             <button id="share-native" type="button" role="menuitem">More sharing options</button>
             <a id="share-whatsapp" role="menuitem" target="_blank" rel="noopener noreferrer">WhatsApp</a>
             <a id="share-email" role="menuitem">Email</a>
@@ -137,12 +183,6 @@
             <button id="btn-invite-email" type="button" role="menuitem">Send email invitation</button>
           </div>
         </div>
-        <button id="btn-toggle-chat" class="btn btn-ghost" type="button" aria-label="Hide chat" aria-pressed="false" aria-controls="chat-sidebar">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M2 2h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5l-3 2V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-          </svg>
-          <span id="chat-toggle-label">Hide Chat</span>
-        </button>
         <a id="btn-sign-in" class="btn btn-primary" href="/auth/google" hidden>Sign in with Google</a>
         <div id="user-profile-badge" class="user-profile-badge" hidden>
           <img id="user-avatar" class="user-avatar" src="" alt="User avatar" width="28" height="28" referrerpolicy="no-referrer" />
@@ -170,18 +210,17 @@
       <section class="meeting-stage" aria-label="Meeting stage">
 
         <div class="section-header">
-          <h2 class="section-title">
-            <span class="section-title-icon" aria-hidden="true">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="3" width="10" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M11 6l3-2v8l-3-2" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-              </svg>
-            </span>
-            Meeting Stage
+          <h2 class="section-title stage-session-title">
+            <span class="stage-session-eyebrow">WORSHIP SESSION</span>
+            <span class="stage-session-name">Come, let us worship</span>
           </h2>
           <div class="stage-header-actions">
             <span id="peer-count-badge" class="peer-count-badge">0 connected</span>
           </div>
+          <button id="btn-stage-console" class="console-button-reference" type="button" aria-expanded="false" aria-controls="audio-deck">
+            <span aria-hidden="true">☷</span>
+            <span><strong>Worship Console</strong><small>Sound &amp; ambience</small></span>
+          </button>
         </div>
 
         <div id="waiting-room-status" class="waiting-room-status" role="status" hidden>
@@ -204,12 +243,7 @@
           <!-- Local Peer Card (Self) -->
           <div class="peer-card peer-card--self" role="listitem" data-peer-id="local">
             <video id="local-camera-video" class="peer-video" autoplay muted playsinline hidden></video>
-            <div class="peer-avatar" aria-hidden="true">
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                <circle cx="16" cy="12" r="6" fill="#38bdf8" opacity="0.8"/>
-                <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.5"/>
-              </svg>
-            </div>
+            <div id="local-peer-avatar" class="peer-avatar" aria-hidden="true">YO</div>
             <div class="peer-info">
               <span id="local-peer-name" class="peer-name">You</span>
               <span id="local-peer-role" class="peer-role">Not in a room</span>
@@ -266,12 +300,25 @@
             <span id="participant-count" class="stage-info-value">1</span>
           </div>
           <div class="meeting-control-bar" aria-label="Meeting controls">
-            <button id="btn-share-screen" class="control-bar-btn" type="button" disabled aria-label="Share screen">Share</button>
-            <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing">Stop sharing</button>
-            <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Enable camera">Camera</button>
-            <button id="btn-raise-hand" class="control-bar-btn" type="button" disabled aria-pressed="false">Raise hand</button>
+            <div class="control-group control-group--local">
+              <button id="btn-control-mic" class="control-bar-btn" type="button" aria-label="Mute microphone" title="Mute microphone">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
+              </button>
+              <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn off camera" title="Turn off camera">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+              </button>
+            </div>
+            <div class="control-group center-controls">
+              <button id="btn-share-screen" class="control-bar-btn" type="button" disabled aria-label="Present now" title="Present now">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4M12 8v6M9.5 10.5L12 8l2.5 2.5"/></svg>
+              </button>
+              <button id="btn-raise-hand" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Raise hand" title="Raise hand">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 11V5.5a1.5 1.5 0 013 0V10 4.5a1.5 1.5 0 013 0V10 6a1.5 1.5 0 013 0v5-3a1.5 1.5 0 013 0v5c0 5-3 8-7.5 8C9 21 7 20 5.5 18L3 14.5a1.6 1.6 0 012.5-2z"/></svg>
+              </button>
             <div class="reaction-control">
-              <button id="btn-reaction" class="control-bar-btn" type="button" disabled aria-label="Send reaction">Reactions</button>
+              <button id="btn-reaction" class="control-bar-btn" type="button" disabled aria-label="Send a reaction" title="Send a reaction">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.8 5.8a5.5 5.5 0 00-7.8 0L12 6.9l-1.1-1.1a5.5 5.5 0 00-7.7 7.8L12 22l8.8-8.4a5.5 5.5 0 000-7.8z"/></svg>
+              </button>
               <div class="reaction-menu" id="reaction-menu" hidden>
                 <button type="button" data-reaction="🙏">Prayer</button>
                 <button type="button" data-reaction="❤️">Heart</button>
@@ -281,12 +328,25 @@
                 <button type="button" data-reaction="➕">Add emoji</button>
               </div>
             </div>
-            <button id="btn-more-controls" class="control-bar-btn" type="button" aria-expanded="false">More</button>
+            <button id="btn-more-controls" class="control-bar-btn" type="button" aria-expanded="false" aria-label="More options" title="More options">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+            </button>
             <div id="more-controls-menu" class="more-controls-menu" hidden>
+              <div class="more-menu-heading"><strong>More options</strong><small>Meeting tools and settings</small></div>
+              <button type="button" data-dock-action="settings">Audio &amp; video settings<small>Choose your microphone, speaker and camera</small></button>
+              <button type="button" data-dock-action="meeting-info">Meeting information<small>View the room name and connection details</small></button>
+              <button type="button" data-dock-action="participants">People in this room<small>View participants and their current status</small></button>
+              <button type="button" data-dock-action="share">Invite people<small>Copy or share the room link</small></button>
               <button id="btn-toggle-captions" class="btn btn-ghost" type="button" disabled aria-pressed="false">Start Captions</button>
               <button id="btn-record" class="btn btn-ghost" type="button" disabled aria-pressed="false">Record locally</button>
               <button id="btn-mute-everyone" class="btn btn-ghost" type="button" disabled hidden>Mute everyone</button>
             </div>
+            </div>
+            <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing">Stop sharing</button>
+            <button id="btn-leave-dock" class="control-bar-btn control-bar-btn--danger" type="button" aria-label="Leave call" title="Leave call">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4 2-4 2M19 12H9M12 18H6a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+            </button>
+            <div class="dock-caption"><span id="dock-time">--:--</span><i aria-hidden="true"></i><span id="dock-room-code">grace-194</span></div>
           </div>
           <div class="stage-info-divider" aria-hidden="true"></div>
           <div class="stage-info-item">
@@ -318,6 +378,7 @@
             Audio Console
           </h2>
           <span class="deck-label">P&amp;W Engine v1.0</span>
+          <button id="btn-close-audio-console" class="header-icon-btn panel-close-btn" type="button" aria-label="Close Worship Console">×</button>
         </div>
         <div class="console-controls">
           <div class="console-control-heading">
@@ -334,10 +395,6 @@
             <label>Speaker voice <input id="console-voice-level" type="range" min="0" max="100" value="100"><output>100%</output></label>
             <label>Room ambience <input id="console-ambience-level" type="range" min="0" max="100" value="50"><output>50%</output></label>
           </div>
-          <button id="btn-smart-ducking" class="smart-ducking-card" type="button" role="switch" aria-checked="true">
-            <span><strong>Smart voice ducking</strong><small>Automatically lowers music when someone speaks</small></span>
-            <span class="switch"><span></span></span>
-          </button>
         </div>
 
         <!-- ═══ CARD 1: Preacher Voice Channel ═══ -->
@@ -738,6 +795,7 @@
             Room Chat
           </h2>
           <span id="chat-unread-badge" class="peer-count-badge" style="display:none">0</span>
+          <button id="btn-close-chat" class="header-icon-btn panel-close-btn" type="button" aria-label="Close chat">×</button>
         </div>
 
         <!-- Chat name input (shown before joining) -->
@@ -793,6 +851,23 @@
 
     </div><!-- /stage-grid -->
   </main>
+
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-dialog-title">
+    <form method="dialog" class="settings-dialog-card">
+      <div class="settings-dialog-header">
+        <div><span class="eyebrow">MEETING TOOLS</span><h2 id="settings-dialog-title">Audio &amp; video settings</h2></div>
+        <button class="header-icon-btn" value="cancel" aria-label="Close settings">×</button>
+      </div>
+      <p class="settings-dialog-copy">Choose your microphone, speaker and camera.</p>
+      <label>Microphone<select id="settings-microphone"><option>Loading devices…</option></select></label>
+      <label>Speaker<select id="settings-speaker"><option>Default speaker</option></select></label>
+      <label>Camera<select id="settings-camera"><option>Loading devices…</option></select></label>
+      <div class="settings-dialog-actions">
+        <button id="btn-test-speaker" class="btn btn-ghost" type="button">Test speaker</button>
+        <button class="btn btn-primary" value="done">Done</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="audio-console-backdrop" class="drawer-backdrop" hidden></div>
   <div id="schedule-modal" class="modal-backdrop" hidden>

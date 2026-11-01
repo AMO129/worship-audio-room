@@ -236,6 +236,17 @@ const $signalQuality    = document.getElementById('signal-quality');
 const $roomModeDisplay  = document.getElementById('room-mode-display');
 const $headerRoomName = document.getElementById('header-room-name');
 const $headerHostIndicator = document.getElementById('header-host-indicator');
+const $referenceRoomTitle = document.getElementById('reference-room-title');
+const $referenceRoomCode = document.getElementById('reference-room-code');
+const $btnCopyRoomCode = document.getElementById('btn-copy-room-code');
+const $btnMeetingInfo = document.getElementById('btn-meeting-info');
+const $meetingInfoPanel = document.getElementById('meeting-info-panel');
+const $meetingInfoRoom = document.getElementById('meeting-info-room');
+const $meetingInfoStatus = document.getElementById('meeting-info-status');
+const $btnHeaderParticipants = document.getElementById('btn-header-participants');
+const $headerParticipantCount = document.getElementById('header-participant-count');
+const $headerParticipantsPanel = document.getElementById('header-participants-panel');
+const $headerParticipantsList = document.getElementById('header-participants-list');
 
 // -- Footer Metrics --
 const $metricSampleRate = document.getElementById('metric-sample-rate');
@@ -262,11 +273,20 @@ const $btnCopyLink    = document.getElementById('btn-copy-link');
 const $shareEmailAddress = document.getElementById('share-email-address');
 const $btnInviteEmail = document.getElementById('btn-invite-email');
 const $btnToggleChat  = document.getElementById('btn-toggle-chat');
+const $btnHeaderChat = document.getElementById('btn-header-chat');
+const $btnHeaderProfile = document.getElementById('btn-header-profile');
+const $headerProfileMenu = document.getElementById('header-profile-menu');
+const $headerProfileInitials = document.getElementById('header-profile-initials');
+const $headerProfileName = document.getElementById('header-profile-name');
+const $headerProfileEmail = document.getElementById('header-profile-email');
+const $btnHeaderSignOut = document.getElementById('btn-header-sign-out');
+const $btnCloseChat = document.getElementById('btn-close-chat');
 const $chatToggleLabel = document.getElementById('chat-toggle-label');
 const $chatSidebar    = document.getElementById('chat-sidebar');
 const $stageGrid      = document.querySelector('.stage-grid');
 const $localPeerName  = document.getElementById('local-peer-name');
 const $localPeerRole  = document.getElementById('local-peer-role');
+const $localPeerAvatar = document.getElementById('local-peer-avatar');
 const $btnSignIn      = document.getElementById('btn-sign-in');
 const $btnSignOut     = document.getElementById('btn-sign-out');
 const $accountLabel   = document.getElementById('account-label');
@@ -283,15 +303,25 @@ const $btnReaction = document.getElementById('btn-reaction');
 const $btnRecord = document.getElementById('btn-record');
 const $btnMuteEveryone = document.getElementById('btn-mute-everyone');
 const $btnMoreControls = document.getElementById('btn-more-controls');
+const $btnControlMic = document.getElementById('btn-control-mic');
+const $btnLeaveDock = document.getElementById('btn-leave-dock');
+const $settingsDialog = document.getElementById('settings-dialog');
+const $btnTestSpeaker = document.getElementById('btn-test-speaker');
+const $settingsMicrophone = document.getElementById('settings-microphone');
+const $settingsSpeaker = document.getElementById('settings-speaker');
+const $settingsCamera = document.getElementById('settings-camera');
 const $moreControlsMenu = document.getElementById('more-controls-menu');
 const $reactionMenu = document.getElementById('reaction-menu');
 const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
+const $btnStageConsole = document.getElementById('btn-stage-console');
+const $btnCloseAudioConsole = document.getElementById('btn-close-audio-console');
 const $audioDeck = document.getElementById('audio-deck');
 const $audioConsoleBackdrop = document.getElementById('audio-console-backdrop');
+const $dockTime = document.getElementById('dock-time');
+const $dockRoomCode = document.getElementById('dock-room-code');
 const $btnHeaderMore = document.getElementById('btn-header-more');
 const $headerMoreMenu = document.getElementById('header-more-menu');
 const $btnBackgroundSound = document.getElementById('btn-background-sound');
-const $btnSmartDucking = document.getElementById('btn-smart-ducking');
 const $consoleMusicLevel = document.getElementById('console-music-level');
 const $consoleVoiceLevel = document.getElementById('console-voice-level');
 const $consoleAmbienceLevel = document.getElementById('console-ambience-level');
@@ -374,6 +404,78 @@ function bindPlayPause() {
 }
 
 function bindCollaborationTools() {
+  $btnCopyRoomCode?.addEventListener('click', async () => {
+    const code = currentRoomId || $roomIdInput?.value.trim();
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      showAlert('Room code copied.', 'info');
+    } catch (error) {
+      console.warn('[app] Could not copy room code:', error);
+      showAlert('Could not copy the room code.', 'warn');
+    }
+  });
+  $btnControlMic?.addEventListener('click', () => $btnEngineToggle?.click());
+  $btnLeaveDock?.addEventListener('click', () => $btnLeave?.click());
+  document.querySelectorAll('[data-dock-action]').forEach(button => {
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (button.dataset.dockAction === 'settings') openSettingsDialog();
+      if (button.dataset.dockAction === 'meeting-info') {
+        $meetingInfoPanel.hidden = false;
+        $headerParticipantsPanel.hidden = true;
+        $btnMeetingInfo?.setAttribute('aria-expanded', 'true');
+        $btnHeaderParticipants?.setAttribute('aria-expanded', 'false');
+      }
+      if (button.dataset.dockAction === 'participants') {
+        renderHeaderParticipants();
+        $headerParticipantsPanel.hidden = false;
+        $meetingInfoPanel.hidden = true;
+        $btnHeaderParticipants?.setAttribute('aria-expanded', 'true');
+        $btnMeetingInfo?.setAttribute('aria-expanded', 'false');
+      }
+      if (button.dataset.dockAction === 'share') openShareMenu();
+      $moreControlsMenu.hidden = true;
+      $btnMoreControls.setAttribute('aria-expanded', 'false');
+    });
+  });
+  $btnTestSpeaker?.addEventListener('click', () => showAlert('Speaker test tone is ready when an audio output is connected.', 'info'));
+  const closeHeaderPopovers = (except) => {
+    [$meetingInfoPanel, $headerParticipantsPanel].forEach(panel => {
+      if (!panel || panel === except) return;
+      panel.hidden = true;
+    });
+    if (except !== $meetingInfoPanel) $btnMeetingInfo?.setAttribute('aria-expanded', 'false');
+    if (except !== $headerParticipantsPanel) $btnHeaderParticipants?.setAttribute('aria-expanded', 'false');
+  };
+  $btnMeetingInfo?.addEventListener('click', () => {
+    const open = $meetingInfoPanel.hidden;
+    closeHeaderPopovers(open ? $meetingInfoPanel : null);
+    $meetingInfoPanel.hidden = !open;
+    $btnMeetingInfo.setAttribute('aria-expanded', String(open));
+  });
+  $btnHeaderParticipants?.addEventListener('click', () => {
+    const open = $headerParticipantsPanel.hidden;
+    closeHeaderPopovers(open ? $headerParticipantsPanel : null);
+    if (open) renderHeaderParticipants();
+    $headerParticipantsPanel.hidden = !open;
+    $btnHeaderParticipants.setAttribute('aria-expanded', String(open));
+  });
+  $btnHeaderProfile?.addEventListener('click', () => {
+    const open = $headerProfileMenu.hidden;
+    $headerProfileMenu.hidden = !open;
+    $btnHeaderProfile.setAttribute('aria-expanded', String(open));
+  });
+  $btnHeaderSignOut?.addEventListener('click', () => $btnSignOut?.click());
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.header-utility-actions')) {
+      closeHeaderPopovers(null);
+    }
+    if (!event.target.closest('.profile-menu-wrap') && $headerProfileMenu) {
+      $headerProfileMenu.hidden = true;
+      $btnHeaderProfile?.setAttribute('aria-expanded', 'false');
+    }
+  });
   $btnRaiseHand?.addEventListener('click', () => {
     handRaised = !handRaised;
     webrtcClient.setHandRaised(handRaised);
@@ -410,6 +512,8 @@ function bindCollaborationTools() {
     $btnToggleAudioConsole.setAttribute('aria-expanded', String(open));
     document.body.classList.toggle('drawer-open', open);
   });
+  $btnStageConsole?.addEventListener('click', () => $btnToggleAudioConsole?.click());
+  $btnCloseAudioConsole?.addEventListener('click', () => $btnToggleAudioConsole?.click());
   $audioConsoleBackdrop?.addEventListener('click', () => $btnToggleAudioConsole.click());
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && $audioDeck.classList.contains('audio-deck--open')) {
@@ -421,11 +525,26 @@ function bindCollaborationTools() {
     $btnHeaderMore.setAttribute('aria-expanded', String(!$headerMoreMenu.hidden));
   });
   $headerMoreMenu?.addEventListener('click', (event) => {
-    const action = event.target.closest('[data-header-action]')?.dataset.headerAction;
+    event.stopPropagation();
+    const target = event.target.closest('[data-header-action]');
+    const action = target?.dataset.headerAction;
     if (!action) return;
     if (action === 'console') $btnToggleAudioConsole.click();
-    if (action === 'settings') showAlert('Audio and video settings are available through your browser permissions.', 'info');
-    if (action === 'brief') downloadDesignBrief();
+    if (action === 'settings') openSettingsDialog();
+    if (action === 'meeting-info') {
+      $meetingInfoPanel.hidden = false;
+      $headerParticipantsPanel.hidden = true;
+      $btnMeetingInfo?.setAttribute('aria-expanded', 'true');
+      $btnHeaderParticipants?.setAttribute('aria-expanded', 'false');
+    }
+    if (action === 'participants') {
+      renderHeaderParticipants();
+      $headerParticipantsPanel.hidden = false;
+      $meetingInfoPanel.hidden = true;
+      $btnHeaderParticipants?.setAttribute('aria-expanded', 'true');
+      $btnMeetingInfo?.setAttribute('aria-expanded', 'false');
+    }
+    if (action === 'share') openShareMenu();
     $headerMoreMenu.hidden = true;
     $btnHeaderMore.setAttribute('aria-expanded', 'false');
   });
@@ -436,11 +555,6 @@ function bindCollaborationTools() {
     else audioManager.resumeMusic().catch((error) => {
       console.warn('[app] Could not resume background sound:', error);
     });
-  });
-  $btnSmartDucking?.addEventListener('click', () => {
-    const enabled = $btnSmartDucking.getAttribute('aria-checked') !== 'true';
-    $btnSmartDucking.setAttribute('aria-checked', String(enabled));
-    audioManager.setSmartDucking(enabled);
   });
   bindConsoleSlider($consoleMusicLevel, value => audioManager.setMasterGain(value));
   bindConsoleSlider($consoleVoiceLevel, value => audioManager.setVoiceGain(value));
@@ -466,16 +580,6 @@ function bindConsoleSlider(input, onChange) {
     input.nextElementSibling.textContent = `${input.value}%`;
     onChange(value);
   });
-}
-
-function downloadDesignBrief() {
-  const contents = 'Worship Audio Room\\n\\nA focused worship meeting with room audio, participant video, chat history, reactions, and smart voice ducking.';
-  const url = URL.createObjectURL(new Blob([contents], { type: 'text/plain' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'worship-audio-room-design-brief.txt';
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function bindScheduleCall() {
@@ -614,10 +718,20 @@ function updatePlayPauseUI() {
   }
 }
 
+function updateDockClock() {
+  if (!$dockTime) return;
+  $dockTime.textContent = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date());
+}
+
 /**
  * Main application entry point. Called once on DOMContentLoaded.
  */
 async function bootstrap() {
+  updateDockClock();
+  window.setInterval(updateDockClock, 30_000);
   const hasDeepLink = applyDeepLink();
 
   // Wire AudioManager state callbacks
@@ -970,6 +1084,16 @@ function updateProfileBadge() {
     }
   } else if ($userProfileBadge) {
     $userProfileBadge.hidden = true;
+  }
+
+  const profileName = authenticatedUser?.name || authenticatedUser?.email || 'Guest user';
+  const profileEmail = authenticatedUser?.email || (isSignedIn ? 'Signed in with Google' : 'Sign in to continue');
+  if ($headerProfileInitials) $headerProfileInitials.textContent = getInitials(profileName);
+  if ($localPeerAvatar && !webrtcClient.isActiveParticipant) $localPeerAvatar.textContent = getInitials(profileName);
+  if ($headerProfileName) $headerProfileName.textContent = profileName;
+  if ($headerProfileEmail) $headerProfileEmail.textContent = profileEmail;
+  if ($btnHeaderProfile) {
+    $btnHeaderProfile.setAttribute('aria-label', isSignedIn ? `Open profile for ${profileName}` : 'Open profile');
   }
 }
 
@@ -1781,14 +1905,48 @@ function bindRoomControls() {
 }
 
 function bindChatVisibility() {
-  $btnToggleChat?.addEventListener('click', () => {
+  const toggleChat = () => {
     const hidden = !$chatSidebar.hidden;
     $chatSidebar.hidden = hidden;
     $stageGrid.classList.toggle('stage-grid--chat-hidden', hidden);
-    $btnToggleChat.setAttribute('aria-pressed', String(hidden));
-    $btnToggleChat.setAttribute('aria-label', hidden ? 'Show chat' : 'Hide chat');
-    $chatToggleLabel.textContent = hidden ? 'Show Chat' : 'Hide Chat';
-  });
+    $btnToggleChat?.setAttribute('aria-pressed', String(hidden));
+    $btnToggleChat?.setAttribute('aria-label', hidden ? 'Show chat' : 'Hide chat');
+    $btnHeaderChat?.setAttribute('aria-expanded', String(!hidden));
+    $chatToggleLabel && ($chatToggleLabel.textContent = hidden ? 'Show Chat' : 'Hide Chat');
+  };
+  $btnToggleChat?.addEventListener('click', toggleChat);
+  $btnHeaderChat?.addEventListener('click', toggleChat);
+  $btnCloseChat?.addEventListener('click', toggleChat);
+}
+
+async function openSettingsDialog() {
+  if (!$settingsDialog) return;
+  if (navigator.mediaDevices?.enumerateDevices) {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const fill = (select, items, fallback) => {
+        select.replaceChildren();
+        if (!items.length) {
+          const option = document.createElement('option');
+          option.textContent = fallback;
+          select.appendChild(option);
+          return;
+        }
+        items.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.textContent = device.label || fallback;
+          select.appendChild(option);
+        });
+      };
+      fill($settingsMicrophone, devices.filter(d => d.kind === 'audioinput'), 'Default microphone');
+      fill($settingsSpeaker, devices.filter(d => d.kind === 'audiooutput'), 'Default speaker');
+      fill($settingsCamera, devices.filter(d => d.kind === 'videoinput'), 'Default camera');
+    } catch (error) {
+      console.warn('[app] Could not enumerate media devices:', error);
+    }
+  }
+  $settingsDialog.showModal();
 }
 
 function bindScreenShare() {
@@ -2043,6 +2201,9 @@ function completeRoomJoin() {
   $roomIdInput.disabled = true;
   $roomModeDisplay.textContent = 'Live';
   $headerRoomName.textContent = currentRoomId || 'Room';
+  if ($referenceRoomCode) $referenceRoomCode.textContent = currentRoomId || 'grace-194';
+  if ($referenceRoomTitle) $referenceRoomTitle.textContent = currentRoomId || 'Grace House Gathering';
+  if ($dockRoomCode) $dockRoomCode.textContent = currentRoomId || 'grace-194';
   $signalQuality.textContent = 'Excellent';
   $signalQuality.className = 'stage-info-value stage-info-value--good';
   updateHostControls();
@@ -2115,6 +2276,9 @@ function handleLeaveRoom() {
   $btnToggleCamera.setAttribute('aria-pressed', 'false');
   $localCameraVideo.srcObject = null;
   $localCameraVideo.hidden = true;
+  if ($referenceRoomCode) $referenceRoomCode.textContent = 'grace-194';
+  if ($referenceRoomTitle) $referenceRoomTitle.textContent = 'Grace House Gathering';
+  if ($dockRoomCode) $dockRoomCode.textContent = 'grace-194';
 
   // Reset URL
   const url = new URL(window.location.href);
@@ -2173,22 +2337,17 @@ function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peer
   }
 
   // Build the peer card element
+  $peerGrid.querySelector('.peer-card--empty')?.remove();
   const li = document.createElement('div');
   li.className = 'peer-card peer-card--remote';
   li.setAttribute('role', 'listitem');
   li.dataset.peerId = peerId;
 
-  const shortId = peerId.slice(0, 8);
   const safeName = escapeHtml(displayName || 'Guest');
+  const initials = getInitials(displayName || 'Guest');
 
   li.innerHTML = `
-    <div class="peer-avatar" aria-hidden="true">
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-        <circle cx="16" cy="12" r="6" fill="#38bdf8" opacity="0.6"/>
-        <path d="M4 28c0-6.627 5.373-12 12-12s12 5.373 12 12"
-          stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.4"/>
-      </svg>
-    </div>
+    <div class="peer-avatar" aria-hidden="true">${initials}</div>
     <div class="peer-info">
       <span class="peer-name" title="${safeName}">${safeName}</span>
       <span class="peer-role" style="color: var(--emerald)">Attendee</span>
@@ -2213,6 +2372,15 @@ function addPeerCard(peerId, stream, displayName = webrtcClient.getPeerName(peer
 
   console.log(`[app] Peer card added: ${peerId}`);
   updatePeerMedia(peerId, stream);
+}
+
+function getInitials(name) {
+  return String(name)
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() || '')
+    .join('') || 'GU';
 }
 
 function updatePeerMedia(peerId, stream) {
@@ -2259,6 +2427,18 @@ function updatePeerCountBadge() {
   const total = count + 1; // +1 for self
   $peerCountBadge.textContent   = `${count} connected`;
   $participantCount.textContent = String(total);
+  if ($headerParticipantCount) $headerParticipantCount.textContent = String(total);
+  renderHeaderParticipants();
+}
+
+function renderHeaderParticipants() {
+  if (!$headerParticipantsList) return;
+  const names = [webrtcClient.userName || $chatUsername?.value?.trim() || 'You'];
+  for (const card of peerElements.values()) {
+    names.push(card.querySelector('.peer-name')?.textContent || 'Guest');
+  }
+  $headerParticipantsList.innerHTML = names.map(name => `<span>${escapeHtml(name)}</span>`).join('');
+  if ($meetingInfoRoom) $meetingInfoRoom.textContent = currentRoomId || 'Lobby';
 }
 
 function updateHostControls() {
@@ -2270,6 +2450,7 @@ function updateHostControls() {
     $btnMuteEveryone.disabled = !isHost;
   }
   if ($localPeerName) $localPeerName.textContent = webrtcClient.userName || 'You';
+  if ($localPeerAvatar) $localPeerAvatar.textContent = getInitials(webrtcClient.userName || authenticatedUser?.name || 'You');
   if ($localPeerRole) {
     $localPeerRole.textContent = isInRoom
       ? (isHost ? 'Host · You' : 'Participant · You')
@@ -2369,6 +2550,7 @@ function renderPeerModerationControls(card, peerId) {
 function setConnectionStatus(status, label) {
   $connectionStatus.className = `status-badge status-${status}`;
   $statusText.textContent = label;
+  if ($meetingInfoStatus) $meetingInfoStatus.textContent = `Connection: ${label}`;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2659,9 +2841,9 @@ function renderPeerReaction(peerId, emoji) {
   setTimeout(() => bubble.remove(), 1800);
 }
 
-function getMeetingShareUrl() {
+function getMeetingShareUrl(roomId = currentRoomId || 'grace-194') {
   const url = new URL(window.location.pathname, window.location.origin);
-  url.searchParams.set('room', currentRoomId);
+  url.searchParams.set('room', roomId);
   return url.toString();
 }
 
@@ -2670,16 +2852,22 @@ function closeShareMenu() {
   $btnShare.setAttribute('aria-expanded', 'false');
 }
 
+function openShareMenu() {
+  const roomId = currentRoomId || $roomIdInput?.value.trim() || 'grace-194';
+  const shareUrl = getMeetingShareUrl(roomId);
+  const message = `Join my Worship Room: ${shareUrl}`;
+  $shareWhatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  $shareEmail.href = `mailto:?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
+  $shareNative.hidden = typeof navigator.share !== 'function';
+  $shareOptions.hidden = false;
+  $btnShare.setAttribute('aria-expanded', 'true');
+  $shareOptions.querySelector('#share-copy-url')?.replaceChildren(document.createTextNode(shareUrl));
+}
+
 function bindShareMenu() {
   $btnShare.addEventListener('click', () => {
-    if (!currentRoomId) return;
-    const shareUrl = getMeetingShareUrl();
-    const message = `Join my Worship Room: ${shareUrl}`;
-    $shareWhatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    $shareEmail.href = `mailto:?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
-    $shareNative.hidden = typeof navigator.share !== 'function';
-    $shareOptions.hidden = !$shareOptions.hidden;
-    $btnShare.setAttribute('aria-expanded', String(!$shareOptions.hidden));
+    if ($shareOptions.hidden) openShareMenu();
+    else closeShareMenu();
   });
 
   $shareNative.addEventListener('click', async () => {
@@ -2687,7 +2875,7 @@ function bindShareMenu() {
       await navigator.share({
         title: 'Join my Worship Room',
         text: 'Join my Worship Room',
-        url: getMeetingShareUrl(),
+        url: getMeetingShareUrl(currentRoomId || $roomIdInput?.value.trim() || 'grace-194'),
       });
       closeShareMenu();
     } catch (error) {
@@ -2700,7 +2888,7 @@ function bindShareMenu() {
 
   $btnCopyLink.addEventListener('click', async () => {
     try {
-      const shareUrl = getMeetingShareUrl();
+      const shareUrl = getMeetingShareUrl(currentRoomId || $roomIdInput?.value.trim() || 'grace-194');
       let copied = false;
       if (navigator.clipboard?.writeText) {
         try {
@@ -2740,7 +2928,7 @@ function bindShareMenu() {
       $shareEmailAddress.focus();
       return;
     }
-    const message = `Join my Worship Room: ${getMeetingShareUrl()}`;
+    const message = `Join my Worship Room: ${getMeetingShareUrl(currentRoomId || $roomIdInput?.value.trim() || 'grace-194')}`;
     window.location.href = `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent('Join my Worship Room')}&body=${encodeURIComponent(message)}`;
     closeShareMenu();
   });
