@@ -3727,9 +3727,9 @@ textarea {
 @media (min-width: 769px) {
   .header-inner {
     display: grid;
-    grid-template-columns: minmax(190px, 1fr) auto auto;
+    grid-template-columns: auto minmax(220px, 1fr) auto;
     grid-template-areas:
-      "brand utilities room"
+      "brand room utilities"
       "controls controls controls";
     height: auto;
     min-height: var(--header-h);
@@ -3739,6 +3739,15 @@ textarea {
   .header-utility-actions { grid-area: utilities; }
   .reference-room-title { grid-area: room; }
   .room-controls { grid-area: controls; justify-content: flex-end; }
+  .reference-room-title { justify-self: start; }
+  .header-utility-actions { justify-self: end; }
+  .header-invite-btn {
+    display: inline-flex;
+    width: auto;
+    min-width: 124px;
+    justify-content: center;
+  }
+  .header-invite-btn .header-control-label { display: inline; }
   .app-header { height: auto; }
   .app-main { min-height: 0; }
   .stage-grid { min-height: calc(100vh - 190px); }
@@ -3799,10 +3808,7 @@ textarea {
   }
   .header-icon-btn svg { width: 19px; height: 19px; }
   .header-control-label {
-    display: block;
-    color: currentColor;
-    font: 600 .58rem/1 var(--font-ui);
-    white-space: nowrap;
+    display: none;
   }
   .header-invite-btn {
     display: inline-flex;
@@ -3815,7 +3821,7 @@ textarea {
     justify-content: center;
     gap: 2px;
     border-radius: 12px;
-    font-size: .58rem;
+    font-size: 0;
   }
   .header-invite-btn svg { width: 19px; height: 19px; }
   .header-profile-btn { width: 36px; height: 36px; }
@@ -3990,8 +3996,8 @@ textarea {
 }
 
 @media (min-width: 769px) and (max-width: 1100px) {
-  .header-inner { grid-template-columns: 1fr auto; grid-template-areas: "brand utilities" "room room" "controls controls"; }
-  .room-controls { justify-content: flex-start; }
+  .header-inner { grid-template-columns: auto minmax(180px, 1fr) auto; grid-template-areas: "brand room utilities" "controls controls controls"; }
+  .room-controls { justify-content: flex-end; }
   .stage-grid { display: block !important; min-height: 0; }
   .meeting-stage { min-height: calc(100vh - 180px); }
 }
@@ -4120,8 +4126,8 @@ textarea {
   .meeting-control-bar .control-bar-btn--danger {
     width: 100% !important;
     min-width: 0 !important;
-    height: 56px !important;
-    min-height: 56px !important;
+    height: 50px !important;
+    min-height: 50px !important;
     padding: 6px 3px !important;
     border-radius: 14px !important;
   }
@@ -4130,8 +4136,25 @@ textarea {
     height: 21px !important;
   }
   .meeting-control-bar .control-label {
-    display: block !important;
-    font-size: .62rem !important;
+    display: none !important;
+  }
+  .meeting-control-bar .control-bar-btn[aria-pressed="false"]::after {
+    content: none;
+  }
+  .meeting-control-bar .control-state-slash {
+    display: none;
+    position: absolute;
+    top: 13px;
+    left: 50%;
+    width: 28px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+    transform: translateX(-50%) rotate(-45deg);
+    pointer-events: none;
+  }
+  .meeting-control-bar .control-bar-btn[aria-pressed="false"] .control-state-slash {
+    display: block;
   }
 }
 
@@ -4143,8 +4166,8 @@ textarea {
   }
   .meeting-control-bar .control-bar-btn,
   .meeting-control-bar .control-bar-btn--danger {
-    height: 56px !important;
-    min-height: 56px !important;
+    height: 50px !important;
+    min-height: 50px !important;
   }
   .meeting-status-group {
     margin-top: 10px;

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=27" />
+  <link rel="stylesheet" href="style.css?v=29" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -337,10 +337,12 @@
             <div class="control-group control-group--local">
               <button id="btn-control-mic" class="control-bar-btn" type="button" aria-pressed="false" aria-label="Unmute microphone" title="Unmute microphone">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
+                <span class="control-state-slash" aria-hidden="true"></span>
                 <span class="control-label">Mic</span>
               </button>
               <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on camera" title="Turn on camera">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+                <span class="control-state-slash" aria-hidden="true"></span>
                 <span class="control-label">Camera</span>
               </button>
             </div>
@@ -351,6 +353,7 @@
               </button>
               <button id="btn-raise-hand" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Raise hand" title="Raise hand">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 11V5.5a1.5 1.5 0 013 0V10 4.5a1.5 1.5 0 013 0V10 6a1.5 1.5 0 013 0v5-3a1.5 1.5 0 013 0v5c0 5-3 8-7.5 8C9 21 7 20 5.5 18L3 14.5a1.6 1.6 0 012.5-2z"/></svg>
+                <span class="control-state-slash" aria-hidden="true"></span>
                 <span class="control-label">Hand</span>
               </button>
             <div class="reaction-control">
@@ -386,6 +389,7 @@
             </div>
             <button id="btn-toggle-captions" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on captions" title="Turn on captions">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h3M14 10h3M7 14h2M12 14h5"/></svg>
+              <span class="control-state-slash" aria-hidden="true"></span>
               <span class="control-label">Captions</span>
             </button>
             <button id="btn-record" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Start recording" title="Start recording">
