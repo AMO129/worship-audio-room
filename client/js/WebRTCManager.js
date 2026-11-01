@@ -56,6 +56,7 @@ export class WebRTCManager {
     this.onKicked        = null;   // () => void
     this.onWaitingRoom   = null;   // () => void
     this.onWaitingPeersChange = null; // (waitingPeers) => void
+    this.onAdmissionRequest = null; // (msg) => void
     this.onAdmissionDenied = null; // () => void
     this.onRoomClosed = null; // (message) => void
     this.onRoomJoined   = null;   // () => void
@@ -213,8 +214,8 @@ export class WebRTCManager {
   }
 
   sendAdmissionDecision(targetId, admit) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({
+    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+      this._ws.send(JSON.stringify({
         type: 'admission-decision',
         target_id: targetId,
         admit: admit
@@ -486,6 +487,8 @@ export class WebRTCManager {
   _onAdmissionRequest(msg) {
     this.waitingPeers.set(msg.peer_id, msg.peer_name || 'Guest');
     this.onWaitingPeersChange?.(this.waitingPeers);
+    // Explicitly call the onAdmissionRequest callback so the UI knows about it
+    this.onAdmissionRequest?.(msg);
   }
 
   _onAdmissionCancelled(msg) {
