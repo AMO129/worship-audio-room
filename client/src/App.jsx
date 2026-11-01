@@ -5,8 +5,8 @@ import {
   Settings, Share2, SlidersHorizontal, UserPlus, Users, Video,
   VideoOff, Volume2, X,
 } from 'lucide-react';
-import { AudioManager } from '../client/js/AudioManager.js';
-import { WebRTCManager } from '../client/js/WebRTCManager.js';
+import { AudioManager } from '../js/AudioManager.js';
+import { WebRTCManager } from '../js/WebRTCManager.js';
 
 const REACTIONS = ['🙏', '❤️', '👏', '🙌', '🔥', '✨'];
 

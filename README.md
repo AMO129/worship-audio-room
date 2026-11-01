@@ -6,11 +6,11 @@
 
 ```
 worship-audio-room/
-├── src/
-│   ├── App.jsx              # React application and meeting state
-│   ├── main.jsx             # Vite entry point
-│   └── styles.css           # Tailwind theme and global styles
 ├── client/
+│   ├── src/
+│   │   ├── App.jsx          # React application and meeting state
+│   │   ├── main.jsx         # Vite entry point
+│   │   └── styles.css       # Tailwind theme and global styles
 │   ├── js/                  # Imperative Web Audio/WebRTC service classes
 │   │   ├── AudioManager.js
 │   │   └── WebRTCManager.js
@@ -64,6 +64,7 @@ uvicorn app.main:app --reload --port 8000
 Install Node dependencies and run the Vite development server:
 
 ```bash
+cd client
 npm install
 npm run dev
 ```
@@ -71,6 +72,7 @@ npm run dev
 For the production-style integrated app, build the React bundle and start FastAPI:
 
 ```bash
+cd client
 npm run build
 cd server
 uvicorn app.main:app --reload --port 8000
