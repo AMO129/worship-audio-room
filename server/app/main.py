@@ -14,6 +14,8 @@ import base64
 import hashlib
 import hmac
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 import time
 from datetime import datetime
@@ -560,7 +562,45 @@ async def websocket_endpoint(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _PROJECT_ROOT = Path(__file__).parents[2]
-_BUILT_CLIENT_DIR = _PROJECT_ROOT / "client" / "dist"
+_SOURCE_CLIENT_DIR = _PROJECT_ROOT / "client"
+_BUILT_CLIENT_DIR = _SOURCE_CLIENT_DIR / "dist"
+
+
+def _ensure_frontend_build() -> None:
+    """Build the React client when the deployment omitted the Render build step."""
+    if (_BUILT_CLIENT_DIR / "index.html").exists():
+        return
+
+    npm = shutil.which("npm")
+    if not npm:
+        raise RuntimeError(
+            "React production bundle is missing at client/dist and npm is unavailable. "
+            "Configure Render to run: cd client && npm ci && npm run build"
+        )
+
+    logger.warning("React production bundle missing; building client/dist at startup.")
+    install = subprocess.run(
+        [npm, "ci", "--no-audit", "--no-fund"],
+        cwd=_SOURCE_CLIENT_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if install.returncode:
+        raise RuntimeError(f"npm ci failed while building the frontend: {install.stderr[-2000:]}")
+
+    build = subprocess.run(
+        [npm, "run", "build"],
+        cwd=_SOURCE_CLIENT_DIR,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if build.returncode:
+        raise RuntimeError(f"npm run build failed while building the frontend: {build.stderr[-2000:]}")
+
+
+_ensure_frontend_build()
 _CLIENT_DIR = _BUILT_CLIENT_DIR if _BUILT_CLIENT_DIR.exists() else _PROJECT_ROOT / "client"
 
 if _CLIENT_DIR.exists():
