@@ -4233,3 +4233,21 @@ textarea {
     display: none !important;
   }
 }
+
+@media (max-width: 768px) {
+  .meeting-control-bar .control-state-slash {
+    display: none !important;
+  }
+  .meeting-control-bar .control-bar-btn.has-state-slash .control-state-slash {
+    display: block !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    width: 30px !important;
+    height: 2px !important;
+    border-radius: 2px;
+    background: currentColor;
+    transform: translate(-50%, -50%) rotate(-45deg) !important;
+    pointer-events: none;
+  }
+}

@@ -245,6 +245,10 @@ export class WebRTCManager {
     if (this.isHost) this._send({ type: 'mute-all', muted: true });
   }
 
+  unmuteEveryone() {
+    if (this.isHost) this._send({ type: 'mute-all', muted: false });
+  }
+
   setDisplayName(displayName) {
     const name = String(displayName ?? '').trim();
     if (name && this.isConnected) {

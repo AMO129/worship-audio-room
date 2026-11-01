@@ -371,7 +371,12 @@ let handRaised = false;
 let recorder = null;
 let recordingChunks = [];
 let replyToMessage = null;
+let everyoneMuted = false;
 const raisedHands = new Set();
+
+function syncControlSlash(button, active) {
+  button?.classList.toggle('has-state-slash', !active);
+}
 
 // -- Auth Overlay --
 const $authOverlay      = document.getElementById('auth-overlay');
@@ -590,8 +595,20 @@ function bindCollaborationTools() {
   });
   $reactionSearch?.addEventListener('input', () => renderReactionPicker($reactionSearch.value));
   $btnMuteEveryone?.addEventListener('click', () => {
-    webrtcClient.muteEveryone();
-    showAlert('Everyone has been muted.', 'info');
+    everyoneMuted = !everyoneMuted;
+    if (everyoneMuted) {
+      webrtcClient.muteEveryone();
+      $btnMuteEveryone.textContent = 'UNMUTE ALL';
+      $btnMuteEveryone.setAttribute('aria-label', 'Unmute everyone');
+      $btnMuteEveryone.title = 'Unmute everyone';
+      showAlert('Everyone has been muted.', 'info');
+    } else {
+      webrtcClient.unmuteEveryone();
+      $btnMuteEveryone.textContent = 'MUTE ALL';
+      $btnMuteEveryone.setAttribute('aria-label', 'Mute everyone');
+      $btnMuteEveryone.title = 'Mute everyone';
+      showAlert('Everyone can speak again.', 'info');
+    }
   });
   $btnRecord?.addEventListener('click', toggleLocalRecording);
   $btnToggleAudioConsole?.addEventListener('click', () => {
@@ -926,6 +943,7 @@ async function bootstrap() {
     $btnToggleCamera.setAttribute('aria-label', 'Turn off camera');
     $btnToggleCamera.title = 'Turn off camera';
     $btnToggleCamera.classList.add('is-active');
+    syncControlSlash($btnToggleCamera, true);
   };
   webrtcClient.onCameraStopped = () => {
     $localCameraVideo.srcObject = null;
@@ -935,6 +953,7 @@ async function bootstrap() {
     $btnToggleCamera.setAttribute('aria-label', 'Turn on camera');
     $btnToggleCamera.title = 'Turn on camera';
     $btnToggleCamera.classList.remove('is-active');
+    syncControlSlash($btnToggleCamera, false);
   };
   webrtcClient.onRemoteScreenShare = (peerId, stream) => {
     renderScreenShareTile(peerId, stream, webrtcClient.getPeerName(peerId), false);
@@ -981,6 +1000,9 @@ async function bootstrap() {
   bindScreenShare();
   bindCamera();
   bindCaptions();
+  syncControlSlash($btnControlMic, false);
+  syncControlSlash($btnToggleCamera, false);
+  syncControlSlash($btnToggleCaptions, false);
   bindChatVisibility();
   bindChat();
   bindPlayPause();
@@ -1402,6 +1424,7 @@ async function handleEngineToggle() {
     $btnControlMic?.setAttribute('aria-label', 'Mute microphone');
     if ($btnControlMic) $btnControlMic.title = 'Mute microphone';
     $btnControlMic?.classList.add('is-active');
+    syncControlSlash($btnControlMic, true);
     $btnEngineToggle.disabled = false;
 
     // Update footer
@@ -1429,6 +1452,7 @@ function deactivateEngine() {
   $btnControlMic?.setAttribute('aria-label', 'Unmute microphone');
   if ($btnControlMic) $btnControlMic.title = 'Unmute microphone';
   $btnControlMic?.classList.remove('is-active');
+  syncControlSlash($btnControlMic, false);
 
   // Reset VU meter to idle
   updateVuMeter(-Infinity);
@@ -2267,6 +2291,7 @@ function startCaptions(SpeechRecognition) {
     $btnToggleCaptions.setAttribute('aria-pressed', 'true');
     $btnToggleCaptions.setAttribute('aria-label', 'Turn off captions');
     $btnToggleCaptions.title = 'Turn off captions';
+    syncControlSlash($btnToggleCaptions, true);
     $captionsPanel.hidden = false;
   } catch (error) {
     showAlert('Could not start captions. Check microphone permission.', 'warn');
@@ -2281,6 +2306,7 @@ function stopCaptions() {
   $btnToggleCaptions.setAttribute('aria-pressed', 'false');
   $btnToggleCaptions.setAttribute('aria-label', 'Turn on captions');
   $btnToggleCaptions.title = 'Turn on captions';
+  syncControlSlash($btnToggleCaptions, false);
 }
 
 function renderCaption(message) {
@@ -2509,6 +2535,10 @@ function handleLeaveRoom() {
   $btnRecord.disabled = true;
   $btnMuteEveryone.disabled = true;
   $btnMuteEveryone.hidden = true;
+  everyoneMuted = false;
+  $btnMuteEveryone.textContent = 'MUTE ALL';
+  $btnMuteEveryone.setAttribute('aria-label', 'Mute everyone');
+  $btnMuteEveryone.title = 'Mute everyone';
   if (recorder?.state === 'recording') recorder.stop();
   handRaised = false;
   $btnRaiseHand.setAttribute('aria-pressed', 'false');
@@ -2519,6 +2549,7 @@ function handleLeaveRoom() {
   $btnToggleCamera.setAttribute('aria-label', 'Turn on camera');
   $btnToggleCamera.title = 'Turn on camera';
   $btnToggleCamera.classList.remove('is-active');
+  syncControlSlash($btnToggleCamera, false);
   $localCameraVideo.srcObject = null;
   $localCameraVideo.hidden = true;
   if ($referenceRoomCode) $referenceRoomCode.textContent = 'grace-194';
