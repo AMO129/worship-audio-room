@@ -4215,9 +4215,9 @@ textarea {
     flex: 0 0 auto;
     stroke: currentColor;
   }
-  .meeting-control-bar #btn-control-mic .control-state-slash,
-  .meeting-control-bar #btn-toggle-camera .control-state-slash,
-  .meeting-control-bar #btn-toggle-captions .control-state-slash {
+  .meeting-control-bar #btn-control-mic[aria-pressed="false"] .control-state-slash,
+  .meeting-control-bar #btn-toggle-camera[aria-pressed="false"] .control-state-slash,
+  .meeting-control-bar #btn-toggle-captions[aria-pressed="false"] .control-state-slash {
     display: block !important;
     position: absolute !important;
     top: 50% !important;
