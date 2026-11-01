@@ -3,7 +3,7 @@ import {
   Calendar, Captions, Check, ChevronDown, Circle, Copy, Facebook, Hand, Heart, Info,
   Instagram, Mail, MessageCircle, Mic, MicOff, MonitorUp, Music2, PhoneOff, Play,
   Settings, Share2, SlidersHorizontal, UserPlus, Users, Video,
-  VideoOff, Volume2, X,
+  VideoOff, Volume2, X, Smile,
 } from 'lucide-react';
 import { AudioManager } from '../js/AudioManager.js';
 import { WebRTCManager } from '../js/WebRTCManager.js';
@@ -109,8 +109,9 @@ function ParticipantTile({ participant, muted, mediaRef }) {
   }, [mediaRef, participant.stream]);
   return <article className="relative min-h-[clamp(20rem,46vh,34rem)] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
     {participant.stream && (hasVideo ? <video ref={mediaRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" /> : <audio ref={mediaRef} autoPlay playsInline />)}
-    <div className="absolute inset-0 grid place-items-center"><div className="grid h-20 w-20 place-items-center rounded-full bg-rose text-2xl font-semibold text-white">{initials(participant.name)}</div></div>
-    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm"><span>{participant.name}</span>{muted && <MicOff size={15} className="text-red-300" />}</div>
+    {!hasVideo && <div className="absolute inset-0 grid place-items-center">{participant.picture ? <img src={participant.picture} alt={`${participant.name} profile`} className="h-24 w-24 rounded-full object-cover" /> : <div className="grid h-20 w-20 place-items-center rounded-full bg-rose text-2xl font-semibold text-white">{initials(participant.name)}</div>}</div>}
+    {participant.raised && <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-gold/50 bg-black/70 px-3 py-2 text-gold"><Hand size={17} /> Hand raised</div>}
+    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm"><span>{participant.name}</span><span className="flex items-center gap-3">{muted && <MicOff size={15} className="text-red-300" />}{participant.raised && <Hand size={15} className="text-gold" />}</span></div>
   </article>;
 }
 
@@ -120,11 +121,11 @@ function VacantParticipantTile() {
   </article>;
 }
 
-function MeetingStage({ localName, localStream, localVideoStream, participants, muted, localVideo, localMediaRef }) {
+function MeetingStage({ localName, localPicture, localStream, localVideoStream, participants, muted, localVideo, localRaised, localMediaRef }) {
   return <section className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 pb-4"><div><p className="text-xs uppercase tracking-[0.25em] text-gold">Live worship room</p><h2 className="mt-1 text-xl font-semibold text-white">Gathered together</h2></div><span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">{participants.length + 1} participant{participants.length === 0 ? '' : 's'}</span></div>
     <div className={`mx-auto grid min-h-[min(70vh,44rem)] max-w-7xl gap-3 ${participants.length > 2 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-      <ParticipantTile participant={{ name: `${localName} (You)`, stream: localVideo ? localVideoStream : localStream, video: localVideo }} muted={muted} mediaRef={localMediaRef} />
+      <ParticipantTile participant={{ name: `${localName} (You)`, picture: localPicture, stream: localVideo ? localVideoStream : localStream, video: localVideo, raised: localRaised }} muted={muted} mediaRef={localMediaRef} />
       {participants.map((participant) => <ParticipantTile key={participant.id} participant={participant} muted={participant.muted} mediaRef={participant.audioRef} />)}
       {participants.length === 0 && <VacantParticipantTile />}
     </div>
@@ -189,6 +190,7 @@ function App() {
   const [sharing, setSharing] = useState(false);
   const [handRaised, setHandRaised] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [reaction, setReaction] = useState('');
   const [caption, setCaption] = useState('');
   const [notice, setNotice] = useState('');
@@ -218,6 +220,7 @@ function App() {
       manager.onPeerRenamed = (id, name) => setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, name } : peer));
       manager.onPeerLeft = (id) => setParticipants((current) => current.filter((peer) => peer.id !== id));
       manager.onPeerMuted = (id, muted) => setParticipants((current) => current.map((peer) => peer.id === id ? { ...peer, muted } : peer));
+      manager.onRaiseHand = (item) => setParticipants((current) => current.map((peer) => peer.id === (item.peer_id || item.sender_id) ? { ...peer, raised: item.raised === true } : peer));
       manager.onChatMessage = (chat) => setMessages((current) => current.some((item) => item.id === chat.id) ? current : [...current, { ...chat, id: chat.id || `${chat.timestamp}-${chat.sender_name}`, timestamp: chat.timestamp || new Date().toISOString() }]);
       manager.onCaption = (item) => setCaption(item.is_final ? '' : item.text || '');
       manager.onReaction = (item) => { setReaction(item.emoji || '✨'); window.setTimeout(() => setReaction(''), 1800); };
@@ -234,6 +237,7 @@ function App() {
   };
 
   const sendMessage = (event) => { event.preventDefault(); const text = message.trim(); if (!text || !managerRef.current) return; managerRef.current.sendChat(text); setMessage(''); };
+  const sendEmojiAsChat = (emoji) => { managerRef.current?.sendChat(emoji); setEmojiPickerOpen(false); };
   const copyRoom = async () => { await navigator.clipboard?.writeText(`${location.origin}/?room=${room.id}`); setNotice('Room link copied'); };
 
   useEffect(() => {
@@ -254,11 +258,11 @@ function App() {
 
   return <div className="flex min-h-screen flex-col bg-obsidian text-white">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-gold text-obsidian"><Music2 size={18} /></span><strong>Worship Room</strong><span className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-white/50 sm:inline">#{room.id}</span></div><div className="flex flex-wrap items-center justify-end gap-2"><Button label="Open Worship Console" onClick={() => setPanel('audio')}><SlidersHorizontal size={17} /><span className="hidden sm:inline">Worship Console</span></Button><Button label="Invite people" onClick={() => setPanel('invite')}><UserPlus size={17} /><span className="hidden sm:inline">Invite people</span></Button><Button label="Room information" onClick={() => setPanel('info')}><Info size={17} /></Button><Button label="Open participants" onClick={() => setPanel('people')}><Users size={17} /></Button><Button label="Open chat" onClick={() => setPanel('chat')}><MessageCircle size={17} /></Button></div></header>
-    <div className="flex min-h-0 flex-1 flex-col"><MeetingStage localName={room.name} localStream={audioRef.current?.destinationNode?.stream} localVideoStream={cameraStream} participants={participants} muted={!micOn} localVideo={cameraOn} localMediaRef={localAudioRef} /><ControlBar micOn={micOn} cameraOn={cameraOn} captionsOn={captionsOn} sharing={sharing} handRaised={handRaised} recording={recording} onMic={toggleMic} onCamera={toggleCamera} onCaptions={toggleCaptions} onShare={toggleShare} onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} onRecord={() => setRecording(!recording)} onReact={() => setPanel('reactions')} onLeave={resetRoom} /></div>
+    <div className="flex min-h-0 flex-1 flex-col"><MeetingStage localName={room.name} localPicture={user.picture} localStream={audioRef.current?.destinationNode?.stream} localVideoStream={cameraStream} participants={participants} muted={!micOn} localVideo={cameraOn} localRaised={handRaised} localMediaRef={localAudioRef} /><ControlBar micOn={micOn} cameraOn={cameraOn} captionsOn={captionsOn} sharing={sharing} handRaised={handRaised} recording={recording} onMic={toggleMic} onCamera={toggleCamera} onCaptions={toggleCaptions} onShare={toggleShare} onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} onRecord={() => setRecording(!recording)} onReact={() => setPanel('reactions')} onLeave={resetRoom} /></div>
     {status && <div className="pointer-events-none fixed left-1/2 top-20 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-xs text-white/70">{status === 'connected' ? 'Connected' : notice || status}</div>}
     {caption && <div className="fixed bottom-28 left-1/2 z-20 max-w-[90vw] -translate-x-1/2 rounded-xl bg-black/70 px-4 py-2 text-sm text-white">{caption}</div>}
     {reaction && <div className="fixed bottom-32 right-8 z-20 animate-bounce text-5xl">{reaction}</div>}
-    {panel === 'chat' && <SidePanel title="Room chat" icon={<MessageCircle size={18} />} onClose={() => setPanel(null)}><div className="space-y-3">{messages.map((item) => <div key={item.id} className="rounded-xl bg-white/[0.06] p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs text-gold">{item.sender_name || 'Guest'}</p><time className="text-[10px] text-white/35">{item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time></div><p className="mt-1 text-sm text-white/80">{item.text}</p><div className="mt-2 flex flex-wrap gap-1">{['🙏', '❤️', '👏', '😂', '🎉'].map((emoji) => <button type="button" key={emoji} aria-label={`React ${emoji}`} onClick={() => managerRef.current?.sendReaction(emoji)} className="rounded-lg px-2 py-1 text-sm hover:bg-gold/15">{emoji}</button>)}</div></div>)}</div><div className="mt-5 grid grid-cols-6 gap-1 rounded-xl border border-white/10 bg-black/20 p-2">{REACTIONS.map((emoji) => <button type="button" key={emoji} aria-label={`Send ${emoji}`} onClick={() => managerRef.current?.sendReaction(emoji)} className="rounded-lg p-2 text-lg hover:bg-gold/15">{emoji}</button>)}</div><form onSubmit={sendMessage} className="mt-3 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Send a message" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-gold" /><Button type="submit" label="Send message" className="bg-gold text-obsidian"><ChevronDown className="rotate-[-90deg]" size={17} /></Button></form></SidePanel>}
+    {panel === 'chat' && <SidePanel title="Room chat" icon={<MessageCircle size={18} />} onClose={() => setPanel(null)}><div className="space-y-3">{messages.map((item) => <div key={item.id} className="rounded-xl bg-white/[0.06] p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs text-gold">{item.sender_name || 'Guest'}</p><time className="text-[10px] text-white/35">{item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time></div><p className="mt-1 text-sm text-white/80">{item.text}</p></div>)}</div><form onSubmit={sendMessage} className="relative mt-5 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Send a message" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-gold" /><Button type="button" label="Open emoji picker" onClick={() => setEmojiPickerOpen(!emojiPickerOpen)} className="px-3"><Smile size={18} /></Button><Button type="submit" label="Send message" className="bg-gold text-obsidian"><ChevronDown className="rotate-[-90deg]" size={17} /></Button>{emojiPickerOpen && <div className="absolute bottom-14 right-0 z-10 grid w-64 grid-cols-6 gap-1 rounded-2xl border border-white/10 bg-[#211d24] p-3 shadow-2xl">{REACTIONS.map((emoji) => <button type="button" key={emoji} aria-label={`Send ${emoji} in chat`} onClick={() => sendEmojiAsChat(emoji)} className="rounded-lg p-2 text-xl hover:bg-gold/15">{emoji}</button>)}</div>}</form></SidePanel>}
     {panel === 'invite' && <InvitePanel roomId={room.id} onClose={() => setPanel(null)} onCopy={copyRoom} />}
     {panel === 'people' && <SidePanel title="People in this room" icon={<Users size={18} />} onClose={() => setPanel(null)}><div className="space-y-2">{[{ id: 'local', name: `${room.name} (You)` }, ...participants].map((person) => <div key={person.id} className="flex items-center justify-between rounded-xl bg-white/[0.05] p-3"><span className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-rose text-xs">{initials(person.name)}</span>{person.name}</span>{person.id !== 'local' && <span className="text-xs text-white/40">{person.muted ? 'Muted' : 'Live'}</span>}</div>)}</div></SidePanel>}
     {panel === 'info' && <SidePanel title="Room information" icon={<Info size={18} />} onClose={() => setPanel(null)}><p className="text-sm text-white/60">Share this code with people you trust.</p><div className="mt-4 flex items-center justify-between rounded-xl bg-black/20 p-4 font-mono text-gold">{room.id}<button aria-label="Copy room code" onClick={copyRoom}><Copy size={17} /></button></div></SidePanel>}
