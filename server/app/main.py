@@ -559,7 +559,9 @@ async def websocket_endpoint(
 # (enables browser-side routing / direct URL navigation).
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_CLIENT_DIR = Path(__file__).parents[2] / "client"
+_PROJECT_ROOT = Path(__file__).parents[2]
+_BUILT_CLIENT_DIR = _PROJECT_ROOT / "client" / "dist"
+_CLIENT_DIR = _BUILT_CLIENT_DIR if _BUILT_CLIENT_DIR.exists() else _PROJECT_ROOT / "client"
 
 if _CLIENT_DIR.exists():
     app.mount(

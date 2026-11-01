@@ -355,6 +355,14 @@ export class AudioManager {
     }
   }
 
+  /** Enable or mute the live microphone without releasing the capture device. */
+  setMicrophoneEnabled(enabled) {
+    const active = Boolean(enabled);
+    this._micStream?.getAudioTracks().forEach((track) => {
+      track.enabled = active;
+    });
+  }
+
   /**
    * Tears down all audio nodes, stops the analysis loop, and releases resources.
    */

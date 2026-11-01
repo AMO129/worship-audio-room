@@ -6,15 +6,15 @@
 
 ```
 worship-audio-room/
+├── src/
+│   ├── App.jsx              # React application and meeting state
+│   ├── main.jsx             # Vite entry point
+│   └── styles.css           # Tailwind theme and global styles
 ├── client/
-│   ├── index.html           # SPA entry point
-│   ├── style.css            # Design system & component styles
-│   ├── js/
-│   │   ├── AudioManager.js  # Web Audio API DSP engine (FSM, ducking, deck)
-│   │   ├── app.js           # UI orchestration & event coordination
-│   │   └── webrtc.js        # WebRTC peer connection & WS signaling client
-│   └── assets/
-│       └── pads/            # Instrumental pad audio files (.mp3 / .ogg)
+│   ├── js/                  # Imperative Web Audio/WebRTC service classes
+│   │   ├── AudioManager.js
+│   │   └── WebRTCManager.js
+│   └── assets/              # Instrumental pad audio files (.mp3 / .ogg)
 ├── server/
 │   ├── app/
 │   │   ├── __init__.py
@@ -61,7 +61,23 @@ uvicorn app.main:app --reload --port 8000
 
 ### Client
 
-Open `client/index.html` directly in a browser, or serve via the FastAPI static mount at `http://localhost:8000/`.
+Install Node dependencies and run the Vite development server:
+
+```bash
+npm install
+npm run dev
+```
+
+For the production-style integrated app, build the React bundle and start FastAPI:
+
+```bash
+npm run build
+cd server
+uvicorn app.main:app --reload --port 8000
+```
+
+FastAPI serves the generated `client/dist` bundle after a build. The Vite
+development server can be used independently while developing the frontend.
 
 ## Deployment
 
