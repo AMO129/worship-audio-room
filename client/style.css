@@ -3574,16 +3574,6 @@ body {
   font-size: 0;
 }
 .meeting-control-bar .control-bar-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; }
-.meeting-control-bar .control-bar-btn[aria-pressed="false"]::after {
-  content: '';
-  position: absolute;
-  width: 25px;
-  height: 2px;
-  border-radius: 2px;
-  background: currentColor;
-  transform: rotate(-45deg);
-  pointer-events: none;
-}
 .meeting-control-bar .control-bar-btn.is-active,
 .meeting-control-bar .control-bar-btn[aria-pressed="true"] {
   color: var(--figma-text);
@@ -3595,6 +3585,7 @@ body {
 .meeting-control-bar #btn-record,
 .meeting-control-bar #btn-mute-everyone,
 .meeting-control-bar #btn-stop-screen-share { font-size: 0; }
+.header-control-label { display: none; }
 .captions-heading {
   position: absolute;
   width: 1px;
@@ -3677,3 +3668,486 @@ body {
 .reaction-custom-picker label { color: #aaa0ae; font-size: .68rem; }
 #reaction-search { width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: #121214; color: #f7f3f0; }
 .reaction-grid--custom { max-height: 136px; overflow-y: auto; }
+
+/* Keep shared controls styled even when legacy responsive blocks are skipped. */
+button,
+input,
+select,
+textarea {
+  color-scheme: dark;
+  font: inherit;
+}
+
+.console-button-reference {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(212, 175, 55, .28);
+  border-radius: 14px;
+  background: #211a26;
+  color: #d4af37;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.console-button-reference:hover,
+.console-button-reference[aria-expanded="true"] {
+  background: rgba(212, 175, 55, .14);
+  border-color: #d4af37;
+}
+.console-button-reference strong { display: block; color: #f5edf4; font-size: .78rem; }
+.console-button-reference small { display: block; margin-top: 2px; color: #a99ba8; font-size: .64rem; }
+
+.room-id-input,
+.settings-dialog-card select,
+.share-email-input,
+.chat-compose input,
+.chat-compose textarea {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #1d1521;
+  color: #f5edf4;
+  border-color: rgba(235, 198, 225, .16);
+}
+.room-id-input:focus,
+.settings-dialog-card select:focus,
+.share-email-input:focus,
+.chat-compose input:focus,
+.chat-compose textarea:focus {
+  outline: 2px solid rgba(212, 175, 55, .42);
+  outline-offset: 1px;
+  border-color: #d4af37;
+}
+
+/* Final responsive composition: one predictable layout layer for all viewports. */
+@media (min-width: 769px) {
+  .header-inner {
+    display: grid;
+    grid-template-columns: minmax(190px, 1fr) auto auto;
+    grid-template-areas:
+      "brand utilities room"
+      "controls controls controls";
+    height: auto;
+    min-height: var(--header-h);
+    padding-block: 10px;
+  }
+  .brand { grid-area: brand; min-width: 0; }
+  .header-utility-actions { grid-area: utilities; }
+  .reference-room-title { grid-area: room; }
+  .room-controls { grid-area: controls; justify-content: flex-end; }
+  .app-header { height: auto; }
+  .app-main { min-height: 0; }
+  .stage-grid { min-height: calc(100vh - 190px); }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --mobile-gutter: 12px;
+    --mobile-control-size: 42px;
+  }
+  html, body { min-width: 0; overflow-x: hidden; }
+  body.drawer-open,
+  body.chat-drawer-open { overflow: hidden; }
+  .app-header {
+    position: sticky;
+    height: auto;
+    min-height: 0;
+  }
+  .header-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand brand"
+      "utilities utilities"
+      "room room";
+    gap: 10px;
+    height: auto;
+    padding: 10px var(--mobile-gutter);
+  }
+  .brand { grid-area: brand; min-width: 0; gap: 8px; }
+  .brand-icon { width: 38px; height: 38px; flex: 0 0 38px; }
+  .brand-text { min-width: 0; }
+  .brand-name, .brand-tagline { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .brand-name { font-size: .92rem; }
+  .brand-tagline { font-size: .62rem; }
+  .room-name-badge { display: none; }
+  .header-utility-actions {
+    grid-area: utilities;
+    justify-self: stretch;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 0;
+  }
+  .header-icon-btn {
+    display: inline-flex;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 44px;
+    padding: 5px 6px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    border: 1px solid rgba(235, 198, 225, .14);
+    border-radius: 12px;
+    background: #211a26;
+  }
+  .header-icon-btn svg { width: 19px; height: 19px; }
+  .header-control-label {
+    display: block;
+    color: currentColor;
+    font: 600 .58rem/1 var(--font-ui);
+    white-space: nowrap;
+  }
+  .header-invite-btn {
+    display: inline-flex;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 44px;
+    padding: 5px 6px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    border-radius: 12px;
+    font-size: .58rem;
+  }
+  .header-invite-btn svg { width: 19px; height: 19px; }
+  .header-profile-btn { width: 36px; height: 36px; }
+  .reference-room-title {
+    grid-area: room;
+    justify-self: stretch;
+    min-width: 0;
+    justify-content: flex-start;
+    padding: 7px 10px;
+    font-size: .68rem;
+  }
+  .reference-room-title strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .room-controls {
+    display: none;
+  }
+  .app-main {
+    padding: var(--mobile-gutter);
+    min-height: 0;
+  }
+  .stage-grid {
+    display: block !important;
+    min-height: 0;
+  }
+  .meeting-stage {
+    min-height: calc(100dvh - 132px);
+    padding: 12px;
+    gap: 10px;
+    border-radius: 16px;
+  }
+  .meeting-stage > .section-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title count"
+      "console console";
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+  .meeting-stage > .section-header .section-title {
+    grid-area: title;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .stage-session-eyebrow,
+  .stage-session-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage-session-name { font-size: 1rem; }
+  .stage-header-actions { grid-area: count; }
+  .peer-count-badge { white-space: nowrap; font-size: .62rem; }
+  .console-button-reference {
+    grid-area: console;
+    justify-self: stretch;
+    width: 100%;
+    min-height: 42px;
+    justify-content: center;
+  }
+  .peer-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-rows: minmax(220px, 42dvh) repeat(2, 112px) !important;
+    height: auto !important;
+    min-height: 0;
+    gap: 8px;
+    overflow: visible;
+  }
+  .peer-card--self {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+    height: auto !important;
+    min-height: 0;
+  }
+  .peer-grid > .peer-card:not(.peer-card--self) {
+    grid-column: auto !important;
+    grid-row: auto !important;
+  }
+  .peer-card--empty { display: none; }
+  .peer-card--remote { min-height: 0; padding: 10px; }
+  .peer-card--remote .peer-avatar { width: 52px; height: 52px; }
+  .stage-info-bar {
+    position: fixed;
+    left: var(--mobile-gutter);
+    right: var(--mobile-gutter);
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 150;
+    display: block;
+    width: auto;
+    max-height: min(250px, 42dvh);
+    padding: 10px;
+    margin: 0;
+    border: 1px solid rgba(235, 198, 225, .16);
+    border-radius: 18px;
+    background: rgba(29, 21, 33, .96);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
+  }
+  .stage-info-bar > .stage-info-item,
+  .stage-info-bar > .stage-info-divider { display: none; }
+  .meeting-control-bar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .meeting-control-bar .control-group {
+    display: contents;
+  }
+  .meeting-control-bar .control-bar-btn,
+  .meeting-control-bar .control-bar-btn--danger {
+    width: 100%;
+    min-width: 0;
+    height: 56px;
+    min-height: 56px;
+    border-radius: 12px;
+  }
+  .meeting-control-bar .reaction-control { display: contents; }
+  .meeting-control-bar .reaction-menu {
+    position: fixed;
+    left: var(--mobile-gutter);
+    right: var(--mobile-gutter);
+    bottom: 76px;
+    width: auto;
+    transform: none;
+  }
+  .meeting-control-bar .dock-caption { display: none; }
+  .audio-deck {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 210;
+    width: 100% !important;
+    max-height: min(82dvh, 680px) !important;
+    padding: 18px var(--mobile-gutter) calc(18px + env(safe-area-inset-bottom)) !important;
+    border-radius: 22px 22px 0 0;
+    transform: translateY(110%) !important;
+    opacity: 0;
+    visibility: hidden;
+  }
+  .audio-deck.audio-deck--open {
+    transform: translateY(0) !important;
+    opacity: 1;
+    visibility: visible;
+  }
+  .audio-deck .section-header,
+  .chat-sidebar .section-header { position: sticky; top: 0; z-index: 1; }
+  .audio-deck .section-header { min-height: 42px; margin-bottom: 12px; }
+  .audio-deck .panel-close-btn,
+  .chat-sidebar .panel-close-btn { display: inline-grid; place-items: center; }
+  .drawer-backdrop {
+    inset: 0;
+    z-index: 200;
+  }
+  .chat-sidebar {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 220;
+    width: 100% !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    border-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .chat-sidebar[hidden] { display: none !important; }
+  .chat-sidebar .section-header {
+    min-height: 62px;
+    padding: 14px var(--mobile-gutter);
+    margin: 0;
+  }
+  .chat-sidebar .chat-messages { padding: 14px var(--mobile-gutter); }
+  .chat-sidebar .chat-compose { margin: 0 var(--mobile-gutter) 12px; }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .header-inner { grid-template-columns: 1fr auto; grid-template-areas: "brand utilities" "room room" "controls controls"; }
+  .room-controls { justify-content: flex-start; }
+  .stage-grid { display: block !important; min-height: 0; }
+  .meeting-stage { min-height: calc(100vh - 180px); }
+}
+
+/* Meeting controls remain identifiable instead of relying on icon recognition. */
+.meeting-control-bar .control-bar-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 68px;
+  min-height: 48px;
+  padding: 5px 8px;
+  border-radius: 12px;
+  font-size: .64rem !important;
+}
+.meeting-control-bar .control-bar-btn svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+}
+.meeting-control-bar .control-label {
+  display: block;
+  color: currentColor;
+  font: 600 .58rem/1.1 var(--font-ui);
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+.meeting-control-bar .control-bar-btn--danger {
+  min-width: 72px;
+}
+
+@media (max-width: 768px) {
+  .meeting-control-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    max-width: 520px;
+    margin-inline: auto;
+    padding: 4px;
+  }
+  .meeting-control-bar .control-bar-btn,
+  .meeting-control-bar .control-bar-btn--danger {
+    min-width: 0;
+    width: 100%;
+    min-height: 62px;
+    height: 62px;
+    padding: 7px 4px;
+    border-radius: 14px;
+  }
+  .meeting-control-bar .control-bar-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+  .meeting-control-bar .control-label {
+    font-size: .64rem;
+  }
+  .meeting-status-group {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    margin: 14px auto 0;
+    padding-top: 12px;
+    border-top: 1px solid rgba(235, 198, 225, .1);
+  }
+  .meeting-status-group .stage-info-divider {
+    display: block;
+    width: 1px;
+    height: 28px;
+  }
+  .meeting-status-group .stage-info-item {
+    display: flex;
+    min-width: 74px;
+    text-align: center;
+    align-items: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .meeting-control-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 360px;
+  }
+  .meeting-control-bar .control-bar-btn,
+  .meeting-control-bar .control-bar-btn--danger {
+    min-height: 68px;
+    height: 68px;
+  }
+  .meeting-control-bar .control-label {
+    font-size: .67rem;
+  }
+  .meeting-status-group {
+    gap: 22px;
+  }
+}
+
+@media (min-width: 769px) {
+  .meeting-status-group { display: contents; }
+}
+
+/* Final mobile dock: floating, reachable, and readable without strike-throughs. */
+@media (max-width: 768px) {
+  .stage-info-bar {
+    position: fixed !important;
+    left: var(--mobile-gutter) !important;
+    right: var(--mobile-gutter) !important;
+    bottom: max(10px, env(safe-area-inset-bottom)) !important;
+    z-index: 150 !important;
+    max-height: min(250px, 42dvh);
+    padding: 10px !important;
+    border: 1px solid rgba(235, 198, 225, .16) !important;
+    border-radius: 18px !important;
+    background: rgba(29, 21, 33, .96) !important;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .4);
+  }
+  .meeting-control-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    width: 100% !important;
+    max-width: 520px;
+    margin-inline: auto;
+  }
+  .meeting-control-bar .control-bar-btn,
+  .meeting-control-bar .control-bar-btn--danger {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: 56px !important;
+    min-height: 56px !important;
+    padding: 6px 3px !important;
+    border-radius: 14px !important;
+  }
+  .meeting-control-bar .control-bar-btn svg {
+    width: 21px !important;
+    height: 21px !important;
+  }
+  .meeting-control-bar .control-label {
+    display: block !important;
+    font-size: .62rem !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .meeting-control-bar {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+    max-width: 360px;
+  }
+  .meeting-control-bar .control-bar-btn,
+  .meeting-control-bar .control-bar-btn--danger {
+    height: 56px !important;
+    min-height: 56px !important;
+  }
+  .meeting-status-group {
+    margin-top: 10px;
+    padding-top: 9px;
+  }
+}

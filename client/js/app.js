@@ -2135,6 +2135,7 @@ function bindChatVisibility() {
     const hidden = !$chatSidebar.hidden;
     $chatSidebar.hidden = hidden;
     $stageGrid.classList.toggle('stage-grid--chat-hidden', hidden);
+    document.body.classList.toggle('chat-drawer-open', !hidden);
     $btnToggleChat?.setAttribute('aria-pressed', String(hidden));
     $btnToggleChat?.setAttribute('aria-label', hidden ? 'Show chat' : 'Hide chat');
     $btnHeaderChat?.setAttribute('aria-expanded', String(!hidden));
@@ -2142,6 +2143,7 @@ function bindChatVisibility() {
   };
   $chatSidebar.hidden = true;
   $stageGrid.classList.add('stage-grid--chat-hidden');
+  document.body.classList.remove('chat-drawer-open');
   $btnToggleChat?.setAttribute('aria-pressed', 'false');
   $btnToggleChat?.setAttribute('aria-label', 'Show chat');
   $btnHeaderChat?.setAttribute('aria-expanded', 'false');

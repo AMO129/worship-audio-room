@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=22" />
+  <link rel="stylesheet" href="style.css?v=27" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -109,9 +109,11 @@
       <div class="header-utility-actions" aria-label="Meeting details">
         <button id="btn-meeting-info" class="header-icon-btn" type="button" aria-label="Meeting information" aria-expanded="false" aria-controls="meeting-info-panel">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+          <span class="header-control-label">Info</span>
         </button>
         <button id="btn-header-participants" class="header-icon-btn header-participants-btn" type="button" aria-label="Show participants" aria-expanded="false" aria-controls="header-participants-panel">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 19c.4-4 2.4-6 6-6s5.6 2 6 6M16 5a3 3 0 010 6M17 13c2.5.4 3.8 2.4 4 5"/></svg><span class="count-pill" id="header-participant-count">1</span>
+          <span class="header-control-label">People</span>
         </button>
         <div id="meeting-info-panel" class="header-popover" hidden>
           <strong>Worship Room</strong>
@@ -125,8 +127,12 @@
         </div>
         <button id="btn-header-chat" class="header-icon-btn" type="button" aria-label="Chat" aria-expanded="false" aria-controls="chat-sidebar">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 15a3 3 0 01-3 3H8l-5 3V7a3 3 0 013-3h11a3 3 0 013 3z"/></svg>
+          <span class="header-control-label">Chat</span>
         </button>
-        <button id="btn-header-invite" class="btn btn-ghost header-invite-btn" type="button">Invite People</button>
+        <button id="btn-header-invite" class="btn btn-ghost header-invite-btn" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 20v-1.5a4.5 4.5 0 00-4.5-4.5h-3A4.5 4.5 0 003 18.5V20M9 10a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM16 8h5M18.5 5.5v5"/></svg>
+          <span class="header-control-label">Invite</span>
+        </button>
         <div class="profile-menu-wrap">
           <button id="btn-header-profile" class="header-profile-btn" type="button" aria-label="Open profile" aria-expanded="false" aria-controls="header-profile-menu">
             <span id="header-profile-initials" aria-hidden="true">GU</span>
@@ -331,21 +337,26 @@
             <div class="control-group control-group--local">
               <button id="btn-control-mic" class="control-bar-btn" type="button" aria-pressed="false" aria-label="Unmute microphone" title="Unmute microphone">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
+                <span class="control-label">Mic</span>
               </button>
               <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on camera" title="Turn on camera">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
+                <span class="control-label">Camera</span>
               </button>
             </div>
             <div class="control-group center-controls">
               <button id="btn-share-screen" class="control-bar-btn" type="button" disabled aria-label="Present now" title="Present now">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4M12 8v6M9.5 10.5L12 8l2.5 2.5"/></svg>
+                <span class="control-label">Present</span>
               </button>
               <button id="btn-raise-hand" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Raise hand" title="Raise hand">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M8 11V5.5a1.5 1.5 0 013 0V10 4.5a1.5 1.5 0 013 0V10 6a1.5 1.5 0 013 0v5-3a1.5 1.5 0 013 0v5c0 5-3 8-7.5 8C9 21 7 20 5.5 18L3 14.5a1.6 1.6 0 012.5-2z"/></svg>
+                <span class="control-label">Hand</span>
               </button>
             <div class="reaction-control">
               <button id="btn-reaction" class="control-bar-btn" type="button" disabled aria-label="Send a reaction" title="Send a reaction">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.8 5.8a5.5 5.5 0 00-7.8 0L12 6.9l-1.1-1.1a5.5 5.5 0 00-7.7 7.8L12 22l8.8-8.4a5.5 5.5 0 000-7.8z"/></svg>
+                <span class="control-label">React</span>
               </button>
               <div class="reaction-menu" id="reaction-menu" hidden>
                 <div class="reaction-menu-header">
@@ -375,28 +386,34 @@
             </div>
             <button id="btn-toggle-captions" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on captions" title="Turn on captions">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h3M14 10h3M7 14h2M12 14h5"/></svg>
+              <span class="control-label">Captions</span>
             </button>
             <button id="btn-record" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Start recording" title="Start recording">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>
+              <span class="control-label">Record</span>
             </button>
             <button id="btn-mute-everyone" class="control-bar-btn" type="button" disabled hidden aria-label="Mute everyone" title="Mute everyone">MUTE</button>
             <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing" title="Stop screen sharing">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/></svg>
+              <span class="control-label">Stop share</span>
             </button>
             <button id="btn-leave-dock" class="control-bar-btn control-bar-btn--danger" type="button" aria-label="Leave call" title="Leave call">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4 2-4 2M19 12H9M12 18H6a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+              <span class="control-label">Leave</span>
             </button>
             <div class="dock-caption"><span id="dock-time">--:--</span><i aria-hidden="true"></i><span id="dock-room-code">grace-194</span></div>
           </div>
           <div class="stage-info-divider" aria-hidden="true"></div>
-          <div class="stage-info-item">
-            <span class="stage-info-label">Signal</span>
-            <span id="signal-quality" class="stage-info-value stage-info-value--good">Good</span>
-          </div>
-          <div class="stage-info-divider" aria-hidden="true"></div>
-          <div class="stage-info-item">
-            <span class="stage-info-label">Mode</span>
-            <span id="room-mode-display" class="stage-info-value">Lobby</span>
+          <div class="meeting-status-group" aria-label="Meeting status">
+            <div class="stage-info-item">
+              <span class="stage-info-label">Signal</span>
+              <span id="signal-quality" class="stage-info-value stage-info-value--good">Good</span>
+            </div>
+            <div class="stage-info-divider" aria-hidden="true"></div>
+            <div class="stage-info-item">
+              <span class="stage-info-label">Mode</span>
+              <span id="room-mode-display" class="stage-info-value">Lobby</span>
+            </div>
           </div>
         </div>
 
@@ -990,7 +1007,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=22"></script>
+  <script type="module" src="js/app.js?v=23"></script>
 
 </body>
 </html>
