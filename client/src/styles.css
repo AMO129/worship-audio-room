@@ -8,3 +8,11 @@ html, body, #root { min-height: 100%; margin: 0; }
 body { min-width: 320px; }
 button, input { font: inherit; }
 .safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+.chat-scroll { max-height: min(52vh, 30rem); overflow-y: auto; padding-right: 0.25rem; }
+.emoji-picker-scroll { max-height: min(42vh, 24rem); overflow-y: auto; }
+.reaction-float { animation: reaction-rise 2.2s ease-out forwards; pointer-events: none; }
+@keyframes reaction-rise {
+  0% { opacity: 0; transform: translate(-50%, 1.5rem) scale(0.75); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -8rem) scale(1.05); }
+}
