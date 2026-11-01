@@ -99,7 +99,7 @@ function LandingScreen({ user, onJoin }) {
   );
 }
 
-function ParticipantTile({ participant, muted, mediaRef }) {
+function ParticipantTile({ participant, muted, mediaRef, local = false }) {
   const hasVideo = participant.video || Boolean(participant.stream?.getVideoTracks?.().length);
   useEffect(() => {
     if (mediaRef?.current && participant.stream) {
@@ -107,13 +107,34 @@ function ParticipantTile({ participant, muted, mediaRef }) {
       mediaRef.current.play?.().catch(() => {});
     }
   }, [mediaRef, participant.stream]);
-  return <article className="relative min-h-[clamp(20rem,46vh,34rem)] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
-    {participant.stream && (hasVideo ? <video ref={mediaRef} autoPlay muted playsInline className="absolute inset-0 h-full w-full object-cover" /> : <audio ref={mediaRef} autoPlay playsInline />)}
-    {!hasVideo && <div className="absolute inset-0 grid place-items-center">{participant.picture ? <img src={participant.picture} alt={`${participant.name} profile`} className="h-24 w-24 rounded-full object-cover" /> : <div className="grid h-20 w-20 place-items-center rounded-full bg-rose text-2xl font-semibold text-white">{initials(participant.name)}</div>}</div>}
-    {participant.raised && <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-gold/50 bg-black/70 px-3 py-2 text-gold"><Hand size={17} /> Hand raised</div>}
-    {participant.reaction && <div className="reaction-float absolute bottom-20 left-1/2 z-20 -translate-x-1/2 text-center"><span className="block text-5xl">{participant.reaction}</span><span className="mt-1 block rounded-full bg-black/70 px-2 py-1 text-xs text-white/80">{participant.name}</span></div>}
-    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm"><span>{participant.name}</span><span className="flex items-center gap-3">{muted && <MicOff size={15} className="text-red-300" />}{participant.raised && <Hand size={15} className="text-gold" />}</span></div>
-  </article>;
+  
+  // FIX: Explicitly pass muted={local} to both audio and video tags to prevent loopback
+  return (
+    <article className="relative min-h-[clamp(20rem,46vh,34rem)] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
+      {participant.stream && (
+        hasVideo ? 
+          <video ref={mediaRef} autoPlay muted={local} playsInline className="absolute inset-0 h-full w-full object-cover" /> : 
+          <audio ref={mediaRef} autoPlay muted={local} playsInline />
+      )}
+      {!hasVideo && (
+        <div className="absolute inset-0 grid place-items-center">
+          {participant.picture ? 
+            <img src={participant.picture} alt={`${participant.name} profile`} className="h-24 w-24 rounded-full object-cover" /> : 
+            <div className="grid h-20 w-20 place-items-center rounded-full bg-rose text-2xl font-semibold text-white">{initials(participant.name)}</div>
+          }
+        </div>
+      )}
+      {participant.raised && <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-gold/50 bg-black/70 px-3 py-2 text-gold"><Hand size={17} /> Hand raised</div>}
+      {participant.reaction && <div className="reaction-float absolute bottom-20 left-1/2 z-20 -translate-x-1/2 text-center"><span className="block text-5xl">{participant.reaction}</span><span className="mt-1 block rounded-full bg-black/70 px-2 py-1 text-xs text-white/80">{participant.name}</span></div>}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm">
+        <span>{participant.name}</span>
+        <span className="flex items-center gap-3">
+          {muted && <MicOff size={15} className="text-red-300" />}
+          {participant.raised && <Hand size={15} className="text-gold" />}
+        </span>
+      </div>
+    </article>
+  );
 }
 
 function VacantParticipantTile() {
@@ -126,8 +147,8 @@ function MeetingStage({ localName, localPicture, localStream, localVideoStream, 
   return <section className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 pb-4"><div><p className="text-xs uppercase tracking-[0.25em] text-gold">Live worship room</p><h2 className="mt-1 text-xl font-semibold text-white">Gathered together</h2></div><span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">{participants.length + 1} participant{participants.length === 0 ? '' : 's'}</span></div>
     <div className={`mx-auto grid min-h-[min(70vh,44rem)] max-w-7xl gap-3 ${participants.length > 2 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
-      <ParticipantTile participant={{ name: `${localName} (You)`, picture: localPicture, stream: localVideo ? localVideoStream : localStream, video: localVideo, raised: localRaised, reaction: localReaction }} muted={muted} mediaRef={localMediaRef} />
-      {participants.map((participant) => <ParticipantTile key={participant.id} participant={participant} muted={participant.muted} mediaRef={participant.audioRef} />)}
+      <ParticipantTile participant={{ name: `${localName} (You)`, picture: localPicture, stream: localVideo ? localVideoStream : localStream, video: localVideo, raised: localRaised, reaction: localReaction }} muted={muted} mediaRef={localMediaRef} local={true} />
+      {participants.map((participant) => <ParticipantTile key={participant.id} participant={participant} muted={participant.muted} mediaRef={participant.audioRef} local={false} />)}
       {participants.length === 0 && <VacantParticipantTile />}
     </div>
   </section>;
@@ -151,7 +172,7 @@ function SidePanel({ title, icon, children, onClose }) {
 }
 
 function InvitePanel({ roomId, onClose, onCopy }) {
-  const link = `${location.origin}/?room=${roomId}`;
+  const link = `${window.location.origin}/?room=${roomId}`;
   const encodedLink = encodeURIComponent(link);
   const encodedText = encodeURIComponent('Join my Worship Room meeting');
   const [email, setEmail] = useState('');
@@ -171,7 +192,7 @@ function InvitePanel({ roomId, onClose, onCopy }) {
       <a href={`https://www.instagram.com/?url=${encodedLink}`} target="_blank" rel="noreferrer" aria-label="Share on Instagram" className="grid place-items-center rounded-2xl border border-pink-400/30 bg-pink-500/10 p-3 text-xs text-pink-200"><Instagram size={20} />Instagram</a>
     </div>
     <label className="mt-6 block text-sm text-white/70">Add by email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="friend@example.com" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white outline-none focus:border-gold" /></label>
-    <Button label="Prepare email invitation" onClick={() => { if (email) location.href = `mailto:${email}?subject=${encodedText}&body=${encodedLink}`; }} className="mt-3 w-full"><Mail size={17} />Send invitation</Button>
+    <Button label="Prepare email invitation" onClick={() => { if (email) window.location.href = `mailto:${email}?subject=${encodedText}&body=${encodedLink}`; }} className="mt-3 w-full"><Mail size={17} />Send invitation</Button>
   </SidePanel>;
 }
 
@@ -198,13 +219,42 @@ function App() {
   const managerRef = useRef(null);
   const audioRef = useRef(null);
   const localAudioRef = useRef(null);
-  const participantRefs = useRef(new Map());
-
+  
+  // FIX: Properly handle parsing ?room=CODE after authentication
   useEffect(() => {
-    fetch('/auth/me', { credentials: 'include' }).then((response) => response.json()).then((data) => setUser(data.user || null)).catch(() => { setAuthError('Unable to verify your session.'); setUser(null); });
-  }, []);
+    fetch('/auth/me', { credentials: 'include' })
+      .then((response) => response.json())
+      .then((data) => {
+        const loggedInUser = data.user || null;
+        setUser(loggedInUser);
+        
+        // If authenticated and URL has a room code, join instantly
+        if (loggedInUser) {
+          const params = new URLSearchParams(window.location.search);
+          const urlRoomCode = params.get('room');
+          if (urlRoomCode && !room && !managerRef.current) {
+            joinRoom(urlRoomCode, loggedInUser.name || 'Guest');
+          }
+        }
+      })
+      .catch(() => { 
+        setAuthError('Unable to verify your session.'); 
+        setUser(null); 
+      });
+  }, []); // Run once on mount
 
-  const resetRoom = () => { managerRef.current?.leave(); audioRef.current?.destroy(); managerRef.current = null; audioRef.current = null; setRoom(null); setParticipants([]); setMessages([]); setStatus('idle'); };
+  const resetRoom = () => { 
+    managerRef.current?.leave(); 
+    audioRef.current?.destroy(); 
+    managerRef.current = null; 
+    audioRef.current = null; 
+    setRoom(null); 
+    setParticipants([]); 
+    setMessages([]); 
+    setStatus('idle');
+    // Clear URL so refreshing doesn't automatically rejoin the old room
+    window.history.replaceState({}, document.title, window.location.pathname);
+  };
 
   const joinRoom = async (roomId, displayName) => {
     try {
@@ -212,7 +262,9 @@ function App() {
       await audio.init();
       await audio.attachMicrophone();
       const manager = new WebRTCManager();
-      audioRef.current = audio; managerRef.current = manager;
+      audioRef.current = audio; 
+      managerRef.current = manager;
+      
       manager.onStatusChange = (next, text) => { setStatus(next); setNotice(text); };
       manager.onCameraStarted = (stream) => setCameraStream(stream);
       manager.onCameraStopped = () => setCameraStream(null);
@@ -234,12 +286,18 @@ function App() {
       manager.onRoomClosed = (text) => { setNotice(text); resetRoom(); };
       manager.onKicked = () => { setNotice('You were removed from this room.'); resetRoom(); };
       manager.onWaitingRoom = () => setStatus('waiting');
+      
       await manager.join(roomId, audio, displayName);
       setRoom({ id: roomId, name: displayName });
       setMicOn(true);
+      
+      // Update the URL to reflect the room you are in (helps if someone copies the URL bar)
+      window.history.replaceState({}, document.title, `/?room=${roomId}`);
     } catch (error) {
       setNotice(error.message || 'Unable to join this room.');
-      audioRef.current?.destroy(); audioRef.current = null; managerRef.current = null;
+      audioRef.current?.destroy(); 
+      audioRef.current = null; 
+      managerRef.current = null;
     }
   };
 
@@ -251,14 +309,7 @@ function App() {
     window.setTimeout(() => setReaction(''), 2200);
   };
   const togglePanel = (name) => setPanel((current) => current === name ? null : name);
-  const copyRoom = async () => { await navigator.clipboard?.writeText(`${location.origin}/?room=${room.id}`); setNotice('Room link copied'); };
-
-  useEffect(() => {
-    if (!room) return undefined;
-    const params = new URLSearchParams(location.search);
-    if (params.get('room')) joinRoom(params.get('room'), user?.name || 'Guest');
-    return undefined;
-  }, [user]);
+  const copyRoom = async () => { await navigator.clipboard?.writeText(`${window.location.origin}/?room=${room.id}`); setNotice('Room link copied'); };
 
   if (user === undefined) return <div className="grid min-h-screen place-items-center bg-obsidian text-gold"><Music2 className="animate-pulse" /></div>;
   if (!user) return <AuthScreen error={authError} />;
