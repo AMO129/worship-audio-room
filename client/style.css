@@ -3561,3 +3561,119 @@ body {
 .meeting-stage > .section-header .section-title::after { content: none !important; }
 .meeting-stage > .section-header .stage-session-eyebrow,
 .meeting-stage > .section-header .stage-session-name { display: block; }
+
+/* Google Meet-style icon controls: state changes are visual, not label rewrites. */
+.meeting-control-bar .control-bar-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  font-size: 0;
+}
+.meeting-control-bar .control-bar-btn svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; }
+.meeting-control-bar .control-bar-btn[aria-pressed="false"]::after {
+  content: '';
+  position: absolute;
+  width: 25px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+.meeting-control-bar .control-bar-btn.is-active,
+.meeting-control-bar .control-bar-btn[aria-pressed="true"] {
+  color: var(--figma-text);
+  border-color: rgba(212,175,55,.55);
+  background: rgba(212,175,55,.14);
+}
+.meeting-control-bar .control-bar-btn--danger { font-size: 0; }
+.meeting-control-bar #btn-toggle-captions,
+.meeting-control-bar #btn-record,
+.meeting-control-bar #btn-mute-everyone,
+.meeting-control-bar #btn-stop-screen-share { font-size: 0; }
+.captions-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keep video media inside the attendee card instead of creating a letterbox strip. */
+.peer-card { overflow: hidden; }
+.peer-card .peer-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: inherit;
+  object-fit: cover;
+  object-position: 50% 30%;
+}
+.peer-card .peer-avatar,
+.peer-card .peer-info,
+.peer-card .peer-indicators,
+.peer-card .peer-moderation-controls,
+.peer-card .peer-hand-indicator,
+.peer-card .peer-reaction-bubble { z-index: 1; }
+.peer-card .peer-video[hidden] { display: none; }
+
+/* Captions float above the stage and never change the grid's layout height. */
+.meeting-stage { position: relative; }
+.captions-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 8;
+  width: min(680px, calc(100% - 32px));
+  max-height: 112px;
+  margin: 0;
+  transform: translateX(-50%);
+  overflow: hidden;
+  background: rgba(18,18,20,.88);
+  border-color: rgba(212,175,55,.28);
+  box-shadow: 0 12px 30px rgba(0,0,0,.28);
+  pointer-events: none;
+}
+.captions-feed { max-height: 68px; overflow-y: auto; scrollbar-width: thin; }
+.caption-line { line-height: 1.35; }
+
+/* Rich reaction tray and searchable custom picker. */
+.reaction-menu {
+  display: grid;
+  gap: 8px;
+  width: 286px;
+  padding: 10px;
+  background: #211f1a;
+  border-color: rgba(212,175,55,.32);
+}
+.reaction-menu-header { display: flex; align-items: center; justify-content: space-between; color: var(--figma-text); font-size: .72rem; }
+.reaction-add-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0 !important;
+  border: 1px solid rgba(212,175,55,.35) !important;
+  border-radius: 50% !important;
+  color: #d4af37 !important;
+  font-size: 1.1rem !important;
+  line-height: 1;
+}
+.reaction-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.reaction-grid button { display: grid; place-items: center; width: 36px; height: 34px; padding: 0; font-size: 1.25rem; }
+.reaction-grid button:hover { background: rgba(212,175,55,.15); }
+.reaction-custom-picker { display: grid; gap: 6px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 8px; }
+.reaction-custom-picker[hidden] { display: none; }
+.reaction-custom-picker label { color: #aaa0ae; font-size: .68rem; }
+#reaction-search { width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: #121214; color: #f7f3f0; }
+.reaction-grid--custom { max-height: 136px; overflow-y: auto; }

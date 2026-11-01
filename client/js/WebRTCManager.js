@@ -195,7 +195,8 @@ export class WebRTCManager {
    * @param {string} text
    */
   sendChat(text, replyTo = null) {
-    this._send({
+    if (!this.isConnected) return false;
+    return this._send({
       type: 'chat-message',
       sender_name: this._userName,
       text,
@@ -995,7 +996,9 @@ export class WebRTCManager {
   _send(message) {
     if (this._ws?.readyState === WebSocket.OPEN) {
       this._ws.send(JSON.stringify(message));
+      return true;
     }
+    return false;
   }
 
   /** Start sending keepalive pings. */

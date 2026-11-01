@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20" />
+  <link rel="stylesheet" href="style.css?v=22" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -329,10 +329,10 @@
           </div>
           <div class="meeting-control-bar" aria-label="Meeting controls">
             <div class="control-group control-group--local">
-              <button id="btn-control-mic" class="control-bar-btn" type="button" aria-label="Mute microphone" title="Mute microphone">
+              <button id="btn-control-mic" class="control-bar-btn" type="button" aria-pressed="false" aria-label="Unmute microphone" title="Unmute microphone">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
               </button>
-              <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn off camera" title="Turn off camera">
+              <button id="btn-toggle-camera" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on camera" title="Turn on camera">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4.5-3v10L15 14"/><rect x="3" y="6" width="12" height="12" rx="2"/></svg>
               </button>
             </div>
@@ -348,18 +348,41 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.8 5.8a5.5 5.5 0 00-7.8 0L12 6.9l-1.1-1.1a5.5 5.5 0 00-7.7 7.8L12 22l8.8-8.4a5.5 5.5 0 000-7.8z"/></svg>
               </button>
               <div class="reaction-menu" id="reaction-menu" hidden>
-                <button type="button" data-reaction="🙏">Prayer</button>
-                <button type="button" data-reaction="❤️">Heart</button>
-                <button type="button" data-reaction="🙌">Praise</button>
-                <button type="button" data-reaction="👏">Applause</button>
-                <button type="button" data-reaction="✨">Sparkle</button>
-                <button type="button" data-reaction="➕">Add emoji</button>
+                <div class="reaction-menu-header">
+                  <strong>Reactions</strong>
+                  <button type="button" class="reaction-add-btn" id="btn-add-reaction" aria-label="Browse more emojis" title="Browse more emojis">+</button>
+                </div>
+                <div class="reaction-grid" id="reaction-grid" role="grid" aria-label="Popular reactions">
+                  <button type="button" data-reaction="🙏" aria-label="Prayer">🙏</button>
+                  <button type="button" data-reaction="❤️" aria-label="Heart">❤️</button>
+                  <button type="button" data-reaction="🙌" aria-label="Praise">🙌</button>
+                  <button type="button" data-reaction="👏" aria-label="Applause">👏</button>
+                  <button type="button" data-reaction="✨" aria-label="Sparkles">✨</button>
+                  <button type="button" data-reaction="😊" aria-label="Smile">😊</button>
+                  <button type="button" data-reaction="😂" aria-label="Laugh">😂</button>
+                  <button type="button" data-reaction="🎉" aria-label="Celebrate">🎉</button>
+                  <button type="button" data-reaction="🔥" aria-label="Fire">🔥</button>
+                  <button type="button" data-reaction="💯" aria-label="Hundred points">💯</button>
+                  <button type="button" data-reaction="👍" aria-label="Thumbs up">👍</button>
+                  <button type="button" data-reaction="🤍" aria-label="White heart">🤍</button>
+                </div>
+                <div class="reaction-custom-picker" id="reaction-custom-picker" hidden>
+                  <label for="reaction-search">Find an emoji</label>
+                  <input id="reaction-search" type="search" placeholder="Search emojis" autocomplete="off" />
+                  <div class="reaction-grid reaction-grid--custom" id="reaction-custom-grid" role="grid" aria-label="Additional emojis"></div>
+                </div>
               </div>
             </div>
-            <button id="btn-toggle-captions" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Start captions" title="Start captions">CC</button>
-            <button id="btn-record" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Record locally" title="Record locally">REC</button>
+            <button id="btn-toggle-captions" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Turn on captions" title="Turn on captions">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h3M14 10h3M7 14h2M12 14h5"/></svg>
+            </button>
+            <button id="btn-record" class="control-bar-btn" type="button" disabled aria-pressed="false" aria-label="Start recording" title="Start recording">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="7"/></svg>
+            </button>
             <button id="btn-mute-everyone" class="control-bar-btn" type="button" disabled hidden aria-label="Mute everyone" title="Mute everyone">MUTE</button>
-            <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing">Stop sharing</button>
+            <button id="btn-stop-screen-share" class="control-bar-btn control-bar-btn--danger" type="button" hidden aria-label="Stop screen sharing" title="Stop screen sharing">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/></svg>
+            </button>
             <button id="btn-leave-dock" class="control-bar-btn control-bar-btn--danger" type="button" aria-label="Leave call" title="Leave call">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 10l4 2-4 2M19 12H9M12 18H6a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
             </button>
@@ -801,7 +824,7 @@
       </aside><!-- /audio-deck -->
 
       <!-- ─── CHAT SIDEBAR ─────────────────────────────── -->
-      <section class="chat-sidebar" aria-label="Live room chat" id="chat-sidebar">
+      <section class="chat-sidebar" aria-label="Live room chat" id="chat-sidebar" hidden>
         <div class="section-header">
           <h2 class="section-title">
             <span class="section-title-icon" aria-hidden="true">
@@ -967,7 +990,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=20"></script>
+  <script type="module" src="js/app.js?v=22"></script>
 
 </body>
 </html>

@@ -340,6 +340,10 @@ const $settingsMicrophone = document.getElementById('settings-microphone');
 const $settingsSpeaker = document.getElementById('settings-speaker');
 const $settingsCamera = document.getElementById('settings-camera');
 const $reactionMenu = document.getElementById('reaction-menu');
+const $btnAddReaction = document.getElementById('btn-add-reaction');
+const $reactionSearch = document.getElementById('reaction-search');
+const $reactionCustomPicker = document.getElementById('reaction-custom-picker');
+const $reactionCustomGrid = document.getElementById('reaction-custom-grid');
 const $btnToggleAudioConsole = document.getElementById('btn-toggle-audio-console');
 const $btnStageConsole = document.getElementById('btn-stage-console');
 const $btnCloseAudioConsole = document.getElementById('btn-close-audio-console');
@@ -520,7 +524,7 @@ function bindCollaborationTools() {
 
   });
   $btnControlMic?.addEventListener('click', () => $btnEngineToggle?.click());
-  $btnLeaveDock?.addEventListener('click', () => $btnLeave?.click());
+  $btnLeaveDock?.addEventListener('click', handleLeaveRoom);
   $btnTestSpeaker?.addEventListener('click', () => showAlert('Speaker test tone is ready when an audio output is connected.', 'info'));
   const closeHeaderPopovers = (except) => {
     [$meetingInfoPanel, $headerParticipantsPanel].forEach(panel => {
@@ -561,23 +565,30 @@ function bindCollaborationTools() {
   $btnRaiseHand?.addEventListener('click', () => {
     handRaised = !handRaised;
     webrtcClient.setHandRaised(handRaised);
-    $btnRaiseHand.textContent = handRaised ? 'Lower Hand' : 'Raise Hand';
     $btnRaiseHand.setAttribute('aria-pressed', String(handRaised));
+    $btnRaiseHand.classList.toggle('is-active', handRaised);
+    $btnRaiseHand.title = handRaised ? 'Lower hand' : 'Raise hand';
   });
   $btnReaction?.addEventListener('click', () => {
     $reactionMenu.hidden = !$reactionMenu.hidden;
+    if (!$reactionMenu.hidden) $reactionSearch?.focus();
   });
   $reactionMenu?.addEventListener('click', event => {
     const button = event.target.closest('[data-reaction]');
     if (!button) return;
-    if (button.dataset.reaction === '➕') {
-      const custom = window.prompt('Enter an emoji to send');
-      if (custom) webrtcClient.sendReaction(custom);
-    } else {
-      webrtcClient.sendReaction(button.dataset.reaction);
-    }
+    webrtcClient.sendReaction(button.dataset.reaction);
     $reactionMenu.hidden = true;
+    if ($reactionCustomPicker) $reactionCustomPicker.hidden = true;
   });
+  $btnAddReaction?.addEventListener('click', () => {
+    const open = $reactionCustomPicker.hidden;
+    $reactionCustomPicker.hidden = !open;
+    if (open) {
+      renderReactionPicker($reactionSearch?.value || '');
+      $reactionSearch?.focus();
+    }
+  });
+  $reactionSearch?.addEventListener('input', () => renderReactionPicker($reactionSearch.value));
   $btnMuteEveryone?.addEventListener('click', () => {
     webrtcClient.muteEveryone();
     showAlert('Everyone has been muted.', 'info');
@@ -622,6 +633,33 @@ function bindCollaborationTools() {
       playProceduralTrack(definition);
     });
   });
+}
+
+const REACTION_EMOJIS = [
+  ['😀', 'grinning'], ['😃', 'smile'], ['😄', 'happy'], ['😁', 'grin'],
+  ['😂', 'laugh'], ['🤣', 'rofl'], ['😊', 'blush'], ['😍', 'love'],
+  ['🥰', 'adore'], ['😎', 'cool'], ['🤔', 'thinking'], ['👏', 'applause'],
+  ['🙌', 'praise'], ['🙏', 'prayer'], ['👍', 'like'], ['👎', 'dislike'],
+  ['❤️', 'heart'], ['🤍', 'white heart'], ['💯', 'hundred'], ['🔥', 'fire'],
+  ['🎉', 'celebrate'], ['✨', 'sparkles'], ['💡', 'idea'], ['✅', 'check'],
+  ['😢', 'sad'], ['😭', 'cry'], ['😮', 'surprised'], ['🎶', 'music'],
+];
+
+function renderReactionPicker(query = '') {
+  if (!$reactionCustomGrid) return;
+  const normalized = query.trim().toLowerCase();
+  $reactionCustomGrid.replaceChildren();
+  REACTION_EMOJIS
+    .filter(([, name]) => !normalized || name.includes(normalized))
+    .forEach(([emoji, name]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.reaction = emoji;
+      button.title = name;
+      button.setAttribute('aria-label', name);
+      button.textContent = emoji;
+      $reactionCustomGrid.appendChild(button);
+    });
 }
 
 function renderRecentInvites() {
@@ -770,12 +808,14 @@ function toggleLocalRecording() {
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     recordingChunks = [];
-    $btnRecord.textContent = 'Record locally';
     $btnRecord.setAttribute('aria-pressed', 'false');
+    $btnRecord.setAttribute('aria-label', 'Start recording');
+    $btnRecord.title = 'Start recording';
   };
   recorder.start();
-  $btnRecord.textContent = 'Stop recording';
   $btnRecord.setAttribute('aria-pressed', 'true');
+  $btnRecord.setAttribute('aria-label', 'Stop recording');
+  $btnRecord.title = 'Stop recording';
 }
 
 function downloadCalendarInvite() {
@@ -881,14 +921,20 @@ async function bootstrap() {
   webrtcClient.onCameraStarted = (stream) => {
     $localCameraVideo.srcObject = stream;
     $localCameraVideo.hidden = false;
-    $btnToggleCamera.textContent = 'Disable Camera';
+    $localPeerAvatar.hidden = true;
     $btnToggleCamera.setAttribute('aria-pressed', 'true');
+    $btnToggleCamera.setAttribute('aria-label', 'Turn off camera');
+    $btnToggleCamera.title = 'Turn off camera';
+    $btnToggleCamera.classList.add('is-active');
   };
   webrtcClient.onCameraStopped = () => {
     $localCameraVideo.srcObject = null;
     $localCameraVideo.hidden = true;
-    $btnToggleCamera.textContent = 'Enable Camera';
+    $localPeerAvatar.hidden = false;
     $btnToggleCamera.setAttribute('aria-pressed', 'false');
+    $btnToggleCamera.setAttribute('aria-label', 'Turn on camera');
+    $btnToggleCamera.title = 'Turn on camera';
+    $btnToggleCamera.classList.remove('is-active');
   };
   webrtcClient.onRemoteScreenShare = (peerId, stream) => {
     renderScreenShareTile(peerId, stream, webrtcClient.getPeerName(peerId), false);
@@ -1352,6 +1398,10 @@ async function handleEngineToggle() {
     isEngineActive = true;
     $btnEngineToggle.setAttribute('aria-pressed', 'true');
     setEngineToggleLabel('On Air');
+    $btnControlMic?.setAttribute('aria-pressed', 'true');
+    $btnControlMic?.setAttribute('aria-label', 'Mute microphone');
+    if ($btnControlMic) $btnControlMic.title = 'Mute microphone';
+    $btnControlMic?.classList.add('is-active');
     $btnEngineToggle.disabled = false;
 
     // Update footer
@@ -1375,6 +1425,10 @@ function deactivateEngine() {
   isEngineActive = false;
   $btnEngineToggle.setAttribute('aria-pressed', 'false');
   setEngineToggleLabel('Enable Mic');
+  $btnControlMic?.setAttribute('aria-pressed', 'false');
+  $btnControlMic?.setAttribute('aria-label', 'Unmute microphone');
+  if ($btnControlMic) $btnControlMic.title = 'Unmute microphone';
+  $btnControlMic?.classList.remove('is-active');
 
   // Reset VU meter to idle
   updateVuMeter(-Infinity);
@@ -2086,6 +2140,12 @@ function bindChatVisibility() {
     $btnHeaderChat?.setAttribute('aria-expanded', String(!hidden));
     $chatToggleLabel && ($chatToggleLabel.textContent = hidden ? 'Show Chat' : 'Hide Chat');
   };
+  $chatSidebar.hidden = true;
+  $stageGrid.classList.add('stage-grid--chat-hidden');
+  $btnToggleChat?.setAttribute('aria-pressed', 'false');
+  $btnToggleChat?.setAttribute('aria-label', 'Show chat');
+  $btnHeaderChat?.setAttribute('aria-expanded', 'false');
+  $chatToggleLabel && ($chatToggleLabel.textContent = 'Show Chat');
   $btnToggleChat?.addEventListener('click', toggleChat);
   $btnHeaderChat?.addEventListener('click', toggleChat);
   $btnCloseChat?.addEventListener('click', toggleChat);
@@ -2202,8 +2262,9 @@ function startCaptions(SpeechRecognition) {
   try {
     captionRecognition.start();
     captionsActive = true;
-    $btnToggleCaptions.textContent = 'Stop Captions';
     $btnToggleCaptions.setAttribute('aria-pressed', 'true');
+    $btnToggleCaptions.setAttribute('aria-label', 'Turn off captions');
+    $btnToggleCaptions.title = 'Turn off captions';
     $captionsPanel.hidden = false;
   } catch (error) {
     showAlert('Could not start captions. Check microphone permission.', 'warn');
@@ -2214,8 +2275,10 @@ function stopCaptions() {
   captionsActive = false;
   captionRecognition?.stop();
   captionRecognition = null;
-  $btnToggleCaptions.textContent = 'Start Captions';
+  $captionsPanel.hidden = true;
   $btnToggleCaptions.setAttribute('aria-pressed', 'false');
+  $btnToggleCaptions.setAttribute('aria-label', 'Turn on captions');
+  $btnToggleCaptions.title = 'Turn on captions';
 }
 
 function renderCaption(message) {
@@ -2446,12 +2509,14 @@ function handleLeaveRoom() {
   $btnMuteEveryone.hidden = true;
   if (recorder?.state === 'recording') recorder.stop();
   handRaised = false;
-  $btnRaiseHand.textContent = 'Raise Hand';
   $btnRaiseHand.setAttribute('aria-pressed', 'false');
+  $btnRaiseHand.classList.remove('is-active');
   $btnShareScreen.hidden = false;
   $btnStopScreenShare.hidden = true;
-  $btnToggleCamera.textContent = 'Enable Camera';
   $btnToggleCamera.setAttribute('aria-pressed', 'false');
+  $btnToggleCamera.setAttribute('aria-label', 'Turn on camera');
+  $btnToggleCamera.title = 'Turn on camera';
+  $btnToggleCamera.classList.remove('is-active');
   $localCameraVideo.srcObject = null;
   $localCameraVideo.hidden = true;
   if ($referenceRoomCode) $referenceRoomCode.textContent = 'grace-194';
@@ -2470,6 +2535,7 @@ function handleLeaveRoom() {
   $btnEmojiPicker?.setAttribute('aria-expanded', 'false');
 
   currentRoomId = null;
+  pendingRoomId = null;
   sessionStorage.removeItem('worship_active_room');
 
   // Remove all dynamically added remote peer cards
@@ -2488,6 +2554,7 @@ function handleLeaveRoom() {
   $roomIdInput.disabled = false;
   updatePeerCountBadge();
   updateHostControls();
+  showMeetingLauncher();
 
   console.log('[app] Left room.');
 }
@@ -2570,7 +2637,11 @@ function updatePeerMedia(peerId, stream) {
   if (video && hasVideo) {
     video.srcObject = stream;
     video.hidden = false;
+    card.querySelector('.peer-avatar')?.setAttribute('hidden', '');
     video.play().catch(() => {});
+  } else if (video) {
+    video.hidden = true;
+    card.querySelector('.peer-avatar')?.removeAttribute('hidden');
   }
 }
 
@@ -2891,7 +2962,10 @@ function bindChat() {
     const text = $chatInput.value.trim();
     if (!text || !webrtcClient.isConnected) return;
 
-    webrtcClient.sendChat(text, replyToMessage);
+    if (!webrtcClient.sendChat(text, replyToMessage)) {
+      showAlert('Chat is reconnecting. Please try again in a moment.', 'warn');
+      return;
+    }
     replyToMessage = null;
     $chatReplyPreview.hidden = true;
     $chatInput.value = '';

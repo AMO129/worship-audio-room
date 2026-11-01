@@ -357,6 +357,13 @@ async def websocket_endpoint(
 
             # ── Chat broadcast ────────────────────────────────────────────────
             if msg_type == "chat-message":
+                if not isinstance(data.get("text"), str) or not data["text"].strip():
+                    logger.warning(
+                        "Ignoring empty chat message from client '%s' in room '%s'",
+                        client_id,
+                        room_id,
+                    )
+                    continue
                 enriched = await manager.broadcast_chat(
                     room_id=room_id,
                     sender_id=client_id,
