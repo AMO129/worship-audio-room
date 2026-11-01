@@ -2350,6 +2350,30 @@ body {
   }
 }
 
+@media (max-width: 768px) {
+  .header-utility-actions .header-icon-btn svg,
+  .header-utility-actions .header-invite-btn svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex: 0 0 auto;
+    stroke: currentColor;
+  }
+  .meeting-control-bar #btn-control-mic .control-state-slash,
+  .meeting-control-bar #btn-toggle-camera .control-state-slash,
+  .meeting-control-bar #btn-toggle-captions .control-state-slash {
+    display: block;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 2px;
+    transform: translate(-50%, -50%) rotate(-45deg);
+  }
+  .meeting-control-bar #btn-raise-hand .control-state-slash {
+    display: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    CHAT SIDEBAR
    ═══════════════════════════════════════════════════════════ */
@@ -4156,6 +4180,13 @@ textarea {
   .meeting-control-bar .control-bar-btn[aria-pressed="false"] .control-state-slash {
     display: block;
   }
+  .meeting-control-bar #btn-raise-hand .control-state-slash,
+  .meeting-control-bar #btn-reaction .control-state-slash,
+  .meeting-control-bar #btn-record .control-state-slash,
+  .meeting-control-bar #btn-share-screen .control-state-slash,
+  .meeting-control-bar #btn-stop-screen-share .control-state-slash {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
@@ -4172,5 +4203,33 @@ textarea {
   .meeting-status-group {
     margin-top: 10px;
     padding-top: 9px;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-utility-actions .header-icon-btn svg,
+  .header-utility-actions .header-invite-btn svg {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex: 0 0 auto;
+    stroke: currentColor;
+  }
+  .meeting-control-bar #btn-control-mic .control-state-slash,
+  .meeting-control-bar #btn-toggle-camera .control-state-slash,
+  .meeting-control-bar #btn-toggle-captions .control-state-slash {
+    display: block !important;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    width: 30px !important;
+    height: 2px !important;
+    border-radius: 2px;
+    background: currentColor;
+    transform: translate(-50%, -50%) rotate(-45deg) !important;
+    pointer-events: none;
+  }
+  .meeting-control-bar #btn-raise-hand .control-state-slash {
+    display: none !important;
   }
 }
