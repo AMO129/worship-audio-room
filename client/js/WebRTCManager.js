@@ -16,6 +16,8 @@ export class WebRTCManager {
     /** @type {Map<string, RTCPeerConnection>} peer_id → RTCPeerConnection */
     this.peers = new Map();
     this._pendingCandidates = new Map();
+    this._peerDisconnectTimers = new Map();
+    this._remoteStreams = new Map();
 
     this._ws            = null;
     this._clientId      = null;
@@ -162,6 +164,9 @@ export class WebRTCManager {
     }
     this.peers.clear();
     this._pendingCandidates.clear();
+    for (const timer of this._peerDisconnectTimers.values()) clearTimeout(timer);
+    this._peerDisconnectTimers.clear();
+    this._remoteStreams.clear();
     this._mutedPeers.clear();
     this._peerNames.clear();
     this.waitingPeers.clear();
@@ -509,36 +514,52 @@ export class WebRTCManager {
    * @param {{ peer_id: string }} msg
    */
   _onPeerLeft(msg) {
-    const pc = this.peers.get(msg.peer_id);
-    if (pc) {
-      this._closePeerConnection(msg.peer_id, pc);
-      this.peers.delete(msg.peer_id);
-    }
-    // Remove any audio element for this peer
-    this._audioContainer
-      ?.querySelector(`[data-peer-id="${msg.peer_id}"]`)
-      ?.remove();
-
-    this._mutedPeers.delete(msg.peer_id);
-    this._peerNames.delete(msg.peer_id);
-    const sender = this.screenSenders.get(msg.peer_id);
-    if (sender) {
-      try { sender.close(); } catch (_) { /* ignore */ }
-      this.screenSenders.delete(msg.peer_id);
-    }
-    const receiver = this.screenReceivers.get(msg.peer_id);
-    if (receiver) {
-      try { receiver.close(); } catch (_) { /* ignore */ }
-      this.screenReceivers.delete(msg.peer_id);
-      this.onRemoteScreenShareStopped?.(msg.peer_id);
-    }
-    this._pendingScreenCandidates.delete(msg.peer_id);
+    this._removePeer(msg.peer_id, 'signaling');
     if (msg.host_id !== undefined && msg.host_id !== this._hostId) {
       this._hostId = msg.host_id;
       this.onHostChange?.(this._hostId);
     }
 
-    this.onPeerLeft?.(msg.peer_id);
+  }
+
+  _removePeer(peerId, reason = 'connection') {
+    const timer = this._peerDisconnectTimers.get(peerId);
+    if (timer) clearTimeout(timer);
+    this._peerDisconnectTimers.delete(peerId);
+    const pc = this.peers.get(peerId);
+    if (pc) {
+      this._closePeerConnection(peerId, pc);
+      this.peers.delete(peerId);
+    }
+    this._remoteStreams.delete(peerId);
+    this._peerNames.delete(peerId);
+    this._mutedPeers.delete(peerId);
+    const sender = this.screenSenders.get(peerId);
+    if (sender) {
+      try { sender.close(); } catch (_) { /* ignore */ }
+      this.screenSenders.delete(peerId);
+    }
+    const receiver = this.screenReceivers.get(peerId);
+    if (receiver) {
+      try { receiver.close(); } catch (_) { /* ignore */ }
+      this.screenReceivers.delete(peerId);
+      this.onRemoteScreenShareStopped?.(peerId);
+    }
+    this._pendingScreenCandidates.delete(peerId);
+    console.info(`[WebRTCManager] Removed peer ${peerId} (${reason}).`);
+    this.onPeerLeft?.(peerId);
+  }
+
+  _schedulePeerRemoval(peerId, delay = 1500) {
+    if (this._peerDisconnectTimers.has(peerId)) return;
+    const timer = setTimeout(() => {
+      this._peerDisconnectTimers.delete(peerId);
+      const pc = this.peers.get(peerId);
+      if (pc && ['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
+        this._removePeer(peerId, pc.iceConnectionState);
+      }
+    }, delay);
+    this._peerDisconnectTimers.set(peerId, timer);
   }
 
   _onParticipantMute(msg) {
@@ -683,22 +704,54 @@ export class WebRTCManager {
       console.log(`[WebRTCManager] ICE state (${remotePeerId}):`, state);
       this.onPeerConnectionState?.(remotePeerId, state);
       if (state === 'connected' || state === 'completed') {
+        const timer = this._peerDisconnectTimers.get(remotePeerId);
+        if (timer) clearTimeout(timer);
+        this._peerDisconnectTimers.delete(remotePeerId);
         clearTimeout(this._iceRestartTimers.get(remotePeerId));
         this._iceRestartTimers.delete(remotePeerId);
         this._iceRestartAttempts.delete(remotePeerId);
       } else if (state === 'failed' || state === 'disconnected') {
+        this._schedulePeerRemoval(remotePeerId, state === 'failed' ? 0 : 1500);
         this._scheduleIceRestart(remotePeerId, pc, state === 'failed' ? 0 : 2000);
       } else if (state === 'checking') {
         this._scheduleIceRestart(remotePeerId, pc, 10000);
       }
     };
 
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === 'connected') {
+        const timer = this._peerDisconnectTimers.get(remotePeerId);
+        if (timer) clearTimeout(timer);
+        this._peerDisconnectTimers.delete(remotePeerId);
+      } else if (state === 'failed' || state === 'closed') {
+        this._schedulePeerRemoval(remotePeerId, 0);
+      } else if (state === 'disconnected') {
+        this._schedulePeerRemoval(remotePeerId);
+      }
+    };
+
     // Remote track arrived
     pc.ontrack = (event) => {
-      const stream = event.streams?.[0] ?? new MediaStream([event.track]);
+      let stream = this._remoteStreams.get(remotePeerId);
+      if (!stream) {
+        stream = event.streams?.[0] ?? new MediaStream();
+        this._remoteStreams.set(remotePeerId, stream);
+      }
+      if (!stream.getTracks().some((track) => track.id === event.track.id)) {
+        stream.addTrack(event.track);
+      }
       this._attachRemoteStream(remotePeerId, stream);
       this.onPeerJoined?.(remotePeerId, stream);
     };
+
+    const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+    const localTrack = this._getLocalTrack();
+    if (localTrack) {
+      audioTransceiver.sender.replaceTrack(localTrack).catch((error) => {
+        console.warn(`[WebRTCManager] Could not attach local audio to ${remotePeerId}:`, error);
+      });
+    }
 
     return pc;
   }
@@ -759,6 +812,10 @@ export class WebRTCManager {
    */
   _closePeerConnection(peerId, pc) {
     this._pendingCandidates.delete(peerId);
+    const disconnectTimer = this._peerDisconnectTimers.get(peerId);
+    if (disconnectTimer) clearTimeout(disconnectTimer);
+    this._peerDisconnectTimers.delete(peerId);
+    this._remoteStreams.delete(peerId);
     clearTimeout(this._iceRestartTimers.get(peerId));
     this._iceRestartTimers.delete(peerId);
     this._iceRestartAttempts.delete(peerId);

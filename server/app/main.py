@@ -318,8 +318,15 @@ async def websocket_endpoint(
         return
     await manager.connect(websocket, room_id, client_id, display_name, str(user["sub"]))
     if client_id in manager.rooms.get(room_id, {}):
-        await persistence.ensure_room(room_id, str(user["sub"]))
-        history = await persistence.recent_chat(room_id)
+        history = []
+        try:
+            await persistence.ensure_room(room_id, str(user["sub"]))
+            history = await persistence.recent_chat(room_id)
+        except Exception:
+            logger.exception(
+                "Could not load persisted chat for room '%s'; using in-memory history.",
+                room_id,
+            )
         if not history:
             history = manager.recent_chat(room_id)
         if history:
@@ -370,14 +377,21 @@ async def websocket_endpoint(
                     payload=data,
                 )
                 if enriched:
-                    await persistence.save_chat(
-                        room_id,
-                        str(user["sub"]),
-                        enriched["sender_name"],
-                        enriched["text"],
-                        datetime.fromisoformat(enriched["timestamp"]),
-                        enriched.get("reply_to"),
-                    )
+                    try:
+                        await persistence.save_chat(
+                            room_id,
+                            str(user["sub"]),
+                            enriched["sender_name"],
+                            enriched["text"],
+                            datetime.fromisoformat(enriched["timestamp"]),
+                            enriched.get("reply_to"),
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Could not persist chat message for room '%s'; "
+                            "message was still broadcast.",
+                            room_id,
+                        )
                 continue
 
             if msg_type == "set-display-name":
@@ -484,7 +498,15 @@ async def websocket_endpoint(
                         room_id, client_id, target_id, admit
                     )
                     if admitted and admit:
-                        history = await persistence.recent_chat(room_id)
+                        try:
+                            history = await persistence.recent_chat(room_id)
+                        except Exception:
+                            logger.exception(
+                                "Could not load persisted chat for admitted room '%s'; "
+                                "using in-memory history.",
+                                room_id,
+                            )
+                            history = []
                         if not history:
                             history = manager.recent_chat(room_id)
                         target_socket = manager.rooms.get(room_id, {}).get(target_id)
