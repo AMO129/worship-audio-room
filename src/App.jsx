@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Captions, Check, ChevronDown, Circle, Copy, Hand, Heart, Info,
+  Calendar, Captions, Check, ChevronDown, Circle, Copy, Hand, Heart, Info,
   MessageCircle, Mic, MicOff, MonitorUp, Music2, PhoneOff, Play,
   Settings, Share2, SlidersHorizontal, UserPlus, Users, Video,
   VideoOff, Volume2, X,
@@ -52,7 +52,29 @@ function AuthScreen({ error }) {
 function LandingScreen({ user, onJoin }) {
   const [roomCode, setRoomCode] = useState('');
   const [name, setName] = useState(user?.name || '');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduled, setScheduled] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('worship-scheduled-meeting') || 'null'); } catch { return null; }
+  });
+  const [title, setTitle] = useState('Worship Room');
+  const [description, setDescription] = useState('Come, let us worship');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
   const createRoom = () => onJoin(crypto.randomUUID().slice(0, 8), name.trim() || user?.name || 'Host');
+  const scheduleMeeting = (event) => {
+    event.preventDefault();
+    const meeting = {
+      id: crypto.randomUUID().slice(0, 8),
+      title: title.trim() || 'Worship Room',
+      description: description.trim() || 'Come, let us worship',
+      date,
+      time,
+      host: name.trim() || user?.name || 'Host',
+    };
+    localStorage.setItem('worship-scheduled-meeting', JSON.stringify(meeting));
+    setScheduled(meeting);
+    setScheduleOpen(false);
+  };
   return (
     <main className="min-h-screen bg-obsidian px-5 py-6 text-white sm:px-10">
       <header className="mx-auto flex max-w-6xl items-center justify-between gap-4 border-b border-white/10 pb-5">
@@ -64,11 +86,14 @@ function LandingScreen({ user, onJoin }) {
         <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-glow">
           <label className="text-sm text-white/70">Display name<input value={name} onChange={(event) => setName(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" maxLength={80} /></label>
           <Button label="Start instant meeting" onClick={createRoom} className="mt-5 w-full bg-gold text-obsidian hover:bg-yellow-300"><Play size={17} />Start instant meeting</Button>
+          <Button label="Schedule meeting for later" onClick={() => setScheduleOpen(true)} className="mt-3 w-full"><Calendar size={17} />Schedule meeting for later</Button>
           <div className="my-5 flex items-center gap-3 text-xs text-white/40"><span className="h-px flex-1 bg-white/10" />OR<span className="h-px flex-1 bg-white/10" /></div>
           <label className="text-sm text-white/70">Meeting code or link<input value={roomCode} onChange={(event) => setRoomCode(event.target.value)} placeholder="e.g. 4f2a9c1d" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" /></label>
           <Button label="Join meeting" onClick={() => roomCode.trim() && onJoin(roomCode.trim().split('/').pop(), name.trim() || user?.name || 'Guest')} className="mt-3 w-full"><Users size={17} />Join meeting</Button>
+          {scheduled && <div className="mt-5 rounded-2xl border border-gold/30 bg-gold/10 p-4 text-left"><p className="text-xs uppercase tracking-widest text-gold">Scheduled meeting</p><p className="mt-2 font-semibold">{scheduled.title}</p><p className="mt-1 text-sm text-white/60">{scheduled.description}</p>{scheduled.date && <p className="mt-2 text-xs text-white/50">{scheduled.date}{scheduled.time ? ` at ${scheduled.time}` : ''}</p>}<Button label="Open scheduled meeting" onClick={() => onJoin(scheduled.id, scheduled.host)} className="mt-3 w-full bg-gold text-obsidian">Open meeting</Button></div>}
         </div>
       </section>
+      {scheduleOpen && <div className="fixed inset-0 z-30 grid place-items-center bg-black/70 p-5"><form onSubmit={scheduleMeeting} className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#1a171d] p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-widest text-gold">Plan ahead</p><h2 className="mt-1 text-xl font-semibold">Schedule a worship meeting</h2></div><button type="button" aria-label="Close schedule dialog" onClick={() => setScheduleOpen(false)} className="rounded-lg p-2 text-white/60 hover:bg-white/10">×</button></div><label className="mt-5 block text-sm text-white/70">Room title<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" /></label><label className="mt-4 block text-sm text-white/70">Description<input value={description} onChange={(event) => setDescription(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" /></label><div className="mt-4 grid gap-4 sm:grid-cols-2"><label className="text-sm text-white/70">Date<input required type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" /></label><label className="text-sm text-white/70">Time<input required type="time" value={time} onChange={(event) => setTime(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none focus:border-gold" /></label></div><Button type="submit" label="Save scheduled meeting" className="mt-6 w-full bg-gold text-obsidian hover:bg-yellow-300"><Calendar size={17} />Save scheduled meeting</Button></form></div>}
     </main>
   );
 }

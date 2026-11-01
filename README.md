@@ -79,6 +79,11 @@ uvicorn app.main:app --reload --port 8000
 FastAPI serves the generated `client/dist` bundle after a build. The Vite
 development server can be used independently while developing the frontend.
 
+The launcher supports instant meetings, scheduled meetings with a title,
+description, date, and time, and joining by room code. Scheduled meeting
+metadata is retained in the browser so the host can reopen it later; the
+room itself is created authoritatively when the host opens the scheduled link.
+
 ## Deployment
 
 - **Backend**: Render (`web` dyno using `Procfile`)
