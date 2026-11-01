@@ -216,11 +216,15 @@ function App() {
   const [reaction, setReaction] = useState('');
   const [caption, setCaption] = useState('');
   const [notice, setNotice] = useState('');
+  
+  // NEW: State to track people waiting in the lobby
+  const [admissionRequests, setAdmissionRequests] = useState([]);
+  
   const managerRef = useRef(null);
   const audioRef = useRef(null);
   const localAudioRef = useRef(null);
   
-  // FIX: Properly handle parsing ?room=CODE after authentication
+  // Handle URL parsing on load
   useEffect(() => {
     fetch('/auth/me', { credentials: 'include' })
       .then((response) => response.json())
@@ -228,7 +232,6 @@ function App() {
         const loggedInUser = data.user || null;
         setUser(loggedInUser);
         
-        // If authenticated and URL has a room code, join instantly
         if (loggedInUser) {
           const params = new URLSearchParams(window.location.search);
           const urlRoomCode = params.get('room');
@@ -241,7 +244,7 @@ function App() {
         setAuthError('Unable to verify your session.'); 
         setUser(null); 
       });
-  }, []); // Run once on mount
+  }, []);
 
   const resetRoom = () => { 
     managerRef.current?.leave(); 
@@ -252,7 +255,7 @@ function App() {
     setParticipants([]); 
     setMessages([]); 
     setStatus('idle');
-    // Clear URL so refreshing doesn't automatically rejoin the old room
+    setAdmissionRequests([]);
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
@@ -283,6 +286,12 @@ function App() {
           window.setTimeout(() => setParticipants((current) => current.map((peer) => peer.id === peerId ? { ...peer, reaction: '' } : peer)), 2200);
         }
       };
+      
+      // NEW: Listen for guests asking to join
+      manager.onAdmissionRequest = (item) => {
+        setAdmissionRequests((current) => [...current, item]);
+      };
+      
       manager.onRoomClosed = (text) => { setNotice(text); resetRoom(); };
       manager.onKicked = () => { setNotice('You were removed from this room.'); resetRoom(); };
       manager.onWaitingRoom = () => setStatus('waiting');
@@ -290,8 +299,6 @@ function App() {
       await manager.join(roomId, audio, displayName);
       setRoom({ id: roomId, name: displayName });
       setMicOn(true);
-      
-      // Update the URL to reflect the room you are in (helps if someone copies the URL bar)
       window.history.replaceState({}, document.title, `/?room=${roomId}`);
     } catch (error) {
       setNotice(error.message || 'Unable to join this room.');
@@ -299,6 +306,14 @@ function App() {
       audioRef.current = null; 
       managerRef.current = null;
     }
+  };
+
+  // NEW: Function to admit or deny guests
+  const handleAdmission = (targetId, admit) => {
+    if (managerRef.current && typeof managerRef.current.sendAdmissionDecision === 'function') {
+      managerRef.current.sendAdmissionDecision(targetId, admit);
+    }
+    setAdmissionRequests((current) => current.filter((req) => req.peer_id !== targetId));
   };
 
   const sendMessage = (event) => { event.preventDefault(); const text = message.trim(); if (!text || !managerRef.current) return; managerRef.current.sendChat(text); setMessage(''); };
@@ -322,7 +337,24 @@ function App() {
 
   return <div className="flex min-h-screen flex-col bg-obsidian text-white">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-gold text-obsidian"><Music2 size={18} /></span><strong>Worship Room</strong><span className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-white/50 sm:inline">#{room.id}</span></div><div className="flex flex-wrap items-center justify-end gap-2"><Button label="Open Worship Console" onClick={() => togglePanel('audio')}><SlidersHorizontal size={17} /><span className="hidden sm:inline">Worship Console</span></Button><Button label="Invite people" onClick={() => togglePanel('invite')}><UserPlus size={17} /><span className="hidden sm:inline">Invite people</span></Button><Button label="Room information" onClick={() => togglePanel('info')}><Info size={17} /></Button><Button label="Open participants" onClick={() => togglePanel('people')}><Users size={17} /></Button><Button label="Open chat" onClick={() => togglePanel('chat')}><MessageCircle size={17} /></Button></div></header>
+    
     <div className="flex min-h-0 flex-1 flex-col"><MeetingStage localName={room.name} localPicture={user.picture} localStream={audioRef.current?.destinationNode?.stream} localVideoStream={cameraStream} participants={participants} muted={!micOn} localVideo={cameraOn} localRaised={handRaised} localReaction={reaction} localMediaRef={localAudioRef} /><ControlBar micOn={micOn} cameraOn={cameraOn} captionsOn={captionsOn} sharing={sharing} handRaised={handRaised} recording={recording} onMic={toggleMic} onCamera={toggleCamera} onCaptions={toggleCaptions} onShare={toggleShare} onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} onRecord={() => setRecording(!recording)} onReact={() => togglePanel('reactions')} onLeave={resetRoom} /></div>
+    
+    {/* NEW: Host Admission Notification Overlay */}
+    {admissionRequests.length > 0 && (
+      <div className="fixed right-5 top-20 z-50 flex flex-col gap-3">
+        {admissionRequests.map((req) => (
+          <div key={req.peer_id} className="w-80 rounded-2xl border border-gold/30 bg-obsidian/95 p-4 shadow-2xl backdrop-blur-md">
+            <p className="text-sm font-semibold text-white">{req.name || 'A guest'} wants to join</p>
+            <div className="mt-3 flex gap-2">
+              <Button label="Deny" danger onClick={() => handleAdmission(req.peer_id, false)} className="flex-1 py-2 text-xs">Deny</Button>
+              <Button label="Admit" active onClick={() => handleAdmission(req.peer_id, true)} className="flex-1 bg-gold py-2 text-xs text-obsidian hover:bg-yellow-300">Admit</Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+
     {status && <div className="pointer-events-none fixed left-1/2 top-20 z-20 -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-xs text-white/70">{status === 'connected' ? 'Connected' : notice || status}</div>}
     {caption && <div className="fixed bottom-28 left-1/2 z-20 max-w-[90vw] -translate-x-1/2 rounded-xl bg-black/70 px-4 py-2 text-sm text-white">{caption}</div>}
     {panel === 'chat' && <SidePanel title="Room chat" icon={<MessageCircle size={18} />} onClose={() => setPanel(null)}><div className="chat-scroll space-y-3">{messages.map((item) => <div key={item.id} className="rounded-xl bg-white/[0.06] p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs text-gold">{item.sender_name || 'Guest'}</p><time className="text-[10px] text-white/35">{item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time></div><p className="mt-1 text-sm text-white/80">{item.text}</p></div>)}</div><form onSubmit={sendMessage} className="relative mt-5 flex gap-2"><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Send a message" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm outline-none focus:border-gold" /><Button type="button" label="Open emoji picker" onClick={() => setEmojiPickerOpen(!emojiPickerOpen)} className="px-3"><Smile size={18} /></Button><Button type="submit" label="Send message" className="bg-gold text-obsidian"><ChevronDown className="rotate-[-90deg]" size={17} /></Button>{emojiPickerOpen && <div className="emoji-picker-scroll absolute bottom-14 right-0 z-10 grid w-64 grid-cols-6 gap-1 rounded-2xl border border-white/10 bg-[#211d24] p-3 shadow-2xl">{REACTIONS.map((emoji) => <button type="button" key={emoji} aria-label={`Send ${emoji} in chat`} onClick={() => sendEmojiAsChat(emoji)} className="rounded-lg p-2 text-xl hover:bg-gold/15">{emoji}</button>)}</div>}</form></SidePanel>}

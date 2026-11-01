@@ -212,6 +212,16 @@ export class WebRTCManager {
     });
   }
 
+  sendAdmissionDecision(targetId, admit) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({
+        type: 'admission-decision',
+        target_id: targetId,
+        admit: admit
+      }));
+    }
+  }
+
   sendCaption(text, isFinal) {
     this._send({ type: 'caption', text, is_final: isFinal });
   }
