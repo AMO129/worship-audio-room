@@ -2034,11 +2034,7 @@ body {
     content: none;
   }
   .meeting-stage > .section-header .section-title::after {
-    content: 'Come, let us worship';
-    display: block;
-    color: #f5edf4;
-    font-size: 1.45rem;
-    letter-spacing: -.03em;
+    content: none;
   }
   .meeting-stage > .section-header .section-title-icon,
   .meeting-stage > .section-header .stage-header-actions { display: none; }
@@ -2831,12 +2827,7 @@ body {
     content: none;
   }
   .meeting-stage > .section-header .section-title::after {
-    content: 'Come, let us worship';
-    display: block;
-    color: var(--figma-text);
-    font-size: 1.45rem;
-    letter-spacing: -.03em;
-    text-transform: none;
+    content: none;
   }
   .meeting-stage > .section-header .section-title-icon,
   .meeting-stage > .section-header .stage-header-actions { display: none; }
@@ -3156,7 +3147,7 @@ body {
   .meeting-stage > .section-header { display: flex; align-items: flex-end; margin: 0; min-height: 56px; }
   .meeting-stage > .section-header .section-title { display: block; font-size: 0; letter-spacing: 0; text-transform: none; }
   .meeting-stage > .section-header .section-title::before { content: none; }
-  .meeting-stage > .section-header .section-title::after { content: 'Come, let us worship'; display: block; color: #f5edf4; font-size: 1.45rem; letter-spacing: -.03em; }
+  .meeting-stage > .section-header .section-title::after { content: none; }
   .meeting-stage > .section-header .section-title-icon,
   .meeting-stage > .section-header .stage-header-actions { display: none; }
   .peer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 164px; gap: 14px; min-height: 0; overflow: visible; }
@@ -3461,6 +3452,9 @@ body {
   backdrop-filter: blur(18px);
 }
 .meeting-launcher[hidden] { display: none; }
+.launcher-active .app-header,
+.launcher-active .app-main,
+.launcher-active .app-footer { visibility: hidden; }
 .meeting-launcher-card {
   width: min(620px, 100%);
   padding: 32px;
@@ -3495,8 +3489,75 @@ body {
 .recent-invites { display: flex; flex-wrap: wrap; gap: 6px; }
 .recent-invites-heading { width: 100%; color: #918798; font-size: .7rem; }
 .recent-invite { padding: 6px 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(212,175,55,.08); color: #f7f3f0; cursor: pointer; }
+
+/* Keep the meeting dock breathable at desktop widths. */
+@media (min-width: 761px) {
+  .meeting-control-bar {
+    gap: 12px;
+    padding: 9px 12px;
+    justify-content: flex-start;
+  }
+
+  /* The room title is rendered by the markup; never synthesize a duplicate with CSS. */
+  .meeting-stage > .section-header .section-title::before,
+  .meeting-stage > .section-header .section-title::after { content: none !important; }
+  .meeting-stage > .section-header .section-title {
+    display: flex !important;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    font-size: inherit !important;
+    letter-spacing: normal !important;
+  }
+  .meeting-stage > .section-header .stage-session-eyebrow { display: block; }
+  .meeting-stage > .section-header .stage-session-name { display: block; }
+  .meeting-control-bar .control-group {
+    gap: 8px;
+    padding-right: 12px;
+    border-right: 1px solid rgba(255,255,255,.1);
+  }
+  .meeting-control-bar .center-controls {
+    padding-right: 12px;
+  }
+  .meeting-control-bar .control-bar-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+  .meeting-control-bar .control-bar-btn[aria-label="Start captions"],
+  .meeting-control-bar .control-bar-btn[aria-label="Record locally"],
+  .meeting-control-bar .control-bar-btn[aria-label="Mute everyone"] {
+    width: 42px;
+    min-width: 42px;
+    font-size: .58rem;
+    letter-spacing: .04em;
+  }
+  .meeting-control-bar .control-bar-btn--danger {
+    width: 46px;
+    min-width: 46px;
+    padding: 0;
+  }
+  .meeting-control-bar .dock-caption {
+    margin-left: auto;
+    padding-left: 14px;
+  }
+}
 @media (max-width: 760px) {
   .launcher-actions, .launcher-date-row { grid-template-columns: 1fr; }
   .meeting-launcher-card { padding: 22px; }
   .header-invite-btn { display: none; }
 }
+
+.meeting-stage > .section-header .section-title {
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  font-size: inherit !important;
+  letter-spacing: normal !important;
+}
+.meeting-stage > .section-header .section-title::before,
+.meeting-stage > .section-header .section-title::after { content: none !important; }
+.meeting-stage > .section-header .stage-session-eyebrow,
+.meeting-stage > .section-header .stage-session-name { display: block; }

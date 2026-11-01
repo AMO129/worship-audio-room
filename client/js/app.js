@@ -449,10 +449,12 @@ function showMeetingLauncher() {
   $launcherDescription.value = active?.metadata?.description || DEFAULT_ROOM_DESCRIPTION;
   if (active?.roomId) $launcherRoomCode.value = active.roomId;
   $meetingLauncher.hidden = false;
+  document.body.classList.add('launcher-active');
 }
 
 function hideMeetingLauncher() {
   if ($meetingLauncher) $meetingLauncher.hidden = true;
+  document.body.classList.remove('launcher-active');
 }
 
 function resetChatFeed() {
@@ -955,6 +957,9 @@ async function bootstrap() {
 
   // Bind sign-out
   bindAuthentication();
+  if (authenticatedUser?.sub && !pendingRoomId && !currentRoomId) {
+    showMeetingLauncher();
+  }
 
   console.log('[app] Bootstrap complete.');
 }

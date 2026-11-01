@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -27,41 +27,6 @@
         </svg>
       </div>
 
-      <section id="meeting-launcher" class="meeting-launcher" hidden aria-labelledby="launcher-title">
-        <div class="meeting-launcher-card">
-          <span class="eyebrow">WELCOME TO WORSHIP ROOM</span>
-          <h1 id="launcher-title">Start or join a meeting</h1>
-          <p class="meeting-launcher-copy">Create a room for worship or join one you were invited to.</p>
-          <div class="launcher-actions">
-            <button id="btn-launch-instant" class="launcher-action launcher-action--primary" type="button">
-              <strong>Start Instant Meeting</strong>
-              <small>Open a room now with your default worship settings</small>
-            </button>
-            <button id="btn-launch-scheduled" class="launcher-action" type="button">
-              <strong>Schedule Meeting for Later</strong>
-              <small>Choose a date, time, room name, and description</small>
-            </button>
-          </div>
-          <div id="launcher-schedule-form" class="launcher-schedule-form" hidden>
-            <label class="launcher-field" for="launcher-room-name">Room name</label>
-            <input id="launcher-room-name" class="room-id-input" type="text" maxlength="60" placeholder="Worship Room" />
-            <label class="launcher-field" for="launcher-description">Description</label>
-            <input id="launcher-description" class="room-id-input" type="text" maxlength="140" placeholder="Come, let us worship" />
-            <div class="launcher-date-row">
-              <label class="launcher-field">Date<input id="launcher-date" class="room-id-input" type="date" /></label>
-              <label class="launcher-field">Time<input id="launcher-time" class="room-id-input" type="time" /></label>
-            </div>
-            <button id="btn-launch-schedule-submit" class="btn btn-primary" type="button">Schedule meeting</button>
-          </div>
-          <div class="launcher-divider"><span>or join by link</span></div>
-          <label class="launcher-field" for="launcher-room-code">Room code or link</label>
-          <div class="launcher-join-row">
-            <input id="launcher-room-code" class="room-id-input" type="text" placeholder="Paste a room code or link" />
-            <button id="btn-launch-join" class="btn btn-primary" type="button">Join</button>
-          </div>
-          <button id="btn-launch-close" class="btn btn-ghost launcher-close" type="button">Not now</button>
-        </div>
-      </section>
       <h1 class="auth-overlay-title">Worship Room</h1>
       <p class="auth-overlay-subtitle">Sign in with your Google account to create or join a call</p>
 
@@ -78,6 +43,42 @@
       </button>
     </div>
   </div>
+
+  <section id="meeting-launcher" class="meeting-launcher" hidden aria-labelledby="launcher-title">
+    <div class="meeting-launcher-card">
+      <span class="eyebrow">WELCOME TO WORSHIP ROOM</span>
+      <h1 id="launcher-title">Start or join a meeting</h1>
+      <p class="meeting-launcher-copy">Create a room for worship or join one you were invited to.</p>
+      <div class="launcher-actions">
+        <button id="btn-launch-instant" class="launcher-action launcher-action--primary" type="button">
+          <strong>Start Instant Meeting</strong>
+          <small>Open a room now with your default worship settings</small>
+        </button>
+        <button id="btn-launch-scheduled" class="launcher-action" type="button">
+          <strong>Schedule Meeting for Later</strong>
+          <small>Choose a date, time, room name, and description</small>
+        </button>
+      </div>
+      <div id="launcher-schedule-form" class="launcher-schedule-form" hidden>
+        <label class="launcher-field" for="launcher-room-name">Room name</label>
+        <input id="launcher-room-name" class="room-id-input" type="text" maxlength="60" placeholder="Worship Room" />
+        <label class="launcher-field" for="launcher-description">Description</label>
+        <input id="launcher-description" class="room-id-input" type="text" maxlength="140" placeholder="Come, let us worship" />
+        <div class="launcher-date-row">
+          <label class="launcher-field">Date<input id="launcher-date" class="room-id-input" type="date" /></label>
+          <label class="launcher-field">Time<input id="launcher-time" class="room-id-input" type="time" /></label>
+        </div>
+        <button id="btn-launch-schedule-submit" class="btn btn-primary" type="button">Schedule meeting</button>
+      </div>
+      <div class="launcher-divider"><span>or join by link</span></div>
+      <label class="launcher-field" for="launcher-room-code">Room code or link</label>
+      <div class="launcher-join-row">
+        <input id="launcher-room-code" class="room-id-input" type="text" placeholder="Paste a room code or link" />
+        <button id="btn-launch-join" class="btn btn-primary" type="button">Join</button>
+      </div>
+      <button id="btn-launch-close" class="btn btn-ghost launcher-close" type="button">Not now</button>
+    </div>
+  </section>
 
   <!-- ═══════════════════════════════════════════════════
        TOP HEADER
@@ -966,7 +967,7 @@
   <!-- ═══════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════ -->
-  <script type="module" src="js/app.js?v=19"></script>
+  <script type="module" src="js/app.js?v=20"></script>
 
 </body>
 </html>
