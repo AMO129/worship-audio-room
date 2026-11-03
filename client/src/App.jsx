@@ -99,24 +99,37 @@ function LandingScreen({ user, onJoin }) {
   );
 }
 
-function ParticipantTile({ participant, muted, mediaRef, local = false }) {
+function ParticipantTile({ participant, muted, mediaRef, local = false, isHost, onMute, onRemove }) {
   const hasVideo = participant.video || Boolean(participant.stream?.getVideoTracks?.().length);
+  const hasScreen = Boolean(participant.screenStream);
+  
   useEffect(() => {
     if (mediaRef?.current && participant.stream) {
       mediaRef.current.srcObject = participant.stream;
       mediaRef.current.play?.().catch(() => {});
     }
   }, [mediaRef, participant.stream]);
-  
-  // FIX: Explicitly pass muted={local} to both audio and video tags to prevent loopback
+
   return (
-    <article className="relative min-h-[clamp(20rem,46vh,34rem)] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
+    <article className="group relative min-h-[clamp(20rem,46vh,34rem)] overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plum to-black/20">
+      {/* Main Camera or Audio */}
       {participant.stream && (
         hasVideo ? 
           <video ref={mediaRef} autoPlay muted={local} playsInline className="absolute inset-0 h-full w-full object-cover" /> : 
           <audio ref={mediaRef} autoPlay muted={local} playsInline />
       )}
-      {!hasVideo && (
+      
+      {/* Screen Share Overlay (Takes priority if active) */}
+      {hasScreen && (
+        <video 
+          autoPlay muted playsInline 
+          className="absolute inset-0 z-10 h-full w-full object-contain bg-black"
+          ref={el => { if (el) el.srcObject = participant.screenStream; }} 
+        />
+      )}
+
+      {/* Avatar Fallback */}
+      {!hasVideo && !hasScreen && (
         <div className="absolute inset-0 grid place-items-center">
           {participant.picture ? 
             <img src={participant.picture} alt={`${participant.name} profile`} className="h-24 w-24 rounded-full object-cover" /> : 
@@ -124,10 +137,17 @@ function ParticipantTile({ participant, muted, mediaRef, local = false }) {
           }
         </div>
       )}
-      {participant.raised && <div className="absolute right-4 top-4 z-10 flex items-center gap-2 rounded-full border border-gold/50 bg-black/70 px-3 py-2 text-gold"><Hand size={17} /> Hand raised</div>}
-      {participant.reaction && <div className="reaction-float absolute bottom-20 left-1/2 z-20 -translate-x-1/2 text-center"><span className="block text-5xl">{participant.reaction}</span><span className="mt-1 block rounded-full bg-black/70 px-2 py-1 text-xs text-white/80">{participant.name}</span></div>}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm">
-        <span>{participant.name}</span>
+
+      {/* Host Controls (Hover) */}
+      {isHost && !local && (
+        <div className="absolute right-4 top-4 z-20 hidden gap-2 group-hover:flex">
+          <button onClick={() => onMute(participant.id)} className="rounded-lg bg-black/70 p-2 text-white hover:text-gold" title="Mute Participant"><MicOff size={16} /></button>
+          <button onClick={() => onRemove(participant.id)} className="rounded-lg bg-red-500/80 p-2 text-white hover:bg-red-600" title="Remove Participant"><UserMinus size={16} /></button>
+        </div>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/80 to-transparent px-4 pb-3 pt-8 text-sm z-20">
+        <span>{participant.name} {hasScreen && "(Presenting)"}</span>
         <span className="flex items-center gap-3">
           {muted && <MicOff size={15} className="text-red-300" />}
           {participant.raised && <Hand size={15} className="text-gold" />}
@@ -137,18 +157,19 @@ function ParticipantTile({ participant, muted, mediaRef, local = false }) {
   );
 }
 
+
 function VacantParticipantTile() {
   return <article className="relative flex min-h-[clamp(20rem,46vh,34rem)] items-center justify-center overflow-hidden rounded-2xl border border-dashed border-gold/30 bg-gold/[0.035] p-6 text-center">
     <div><div className="mx-auto grid h-20 w-20 place-items-center rounded-full border border-gold/30 bg-gold/10 text-3xl text-gold">+</div><h3 className="mt-5 text-lg font-medium text-white/80">Waiting for someone to join</h3><p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-white/45">Invite another worshipper to fill this space in the room.</p></div>
   </article>;
 }
 
-function MeetingStage({ localName, localPicture, localStream, localVideoStream, participants, muted, localVideo, localRaised, localReaction, localMediaRef }) {
+function MeetingStage({ localName, localPicture, localStream, localVideoStream, participants, muted, localVideo, localRaised, localReaction, localMediaRef, isHost, onMute, onRemove }) {
   return <section className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
     <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 pb-4"><div><p className="text-xs uppercase tracking-[0.25em] text-gold">Live worship room</p><h2 className="mt-1 text-xl font-semibold text-white">Gathered together</h2></div><span className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-xs text-white/60">{participants.length + 1} participant{participants.length === 0 ? '' : 's'}</span></div>
     <div className={`mx-auto grid min-h-[min(70vh,44rem)] max-w-7xl gap-3 ${participants.length > 2 ? 'sm:grid-cols-2 lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
       <ParticipantTile participant={{ name: `${localName} (You)`, picture: localPicture, stream: localVideo ? localVideoStream : localStream, video: localVideo, raised: localRaised, reaction: localReaction }} muted={muted} mediaRef={localMediaRef} local={true} />
-      {participants.map((participant) => <ParticipantTile key={participant.id} participant={participant} muted={participant.muted} mediaRef={participant.audioRef} local={false} />)}
+      {participants.map((participant) => <ParticipantTile key={participant.id} participant={participant} muted={participant.muted} mediaRef={participant.audioRef} local={false} isHost={isHost} onMute={onMute} onRemove={onRemove} />)}
       {participants.length === 0 && <VacantParticipantTile />}
     </div>
   </section>;
@@ -286,6 +307,12 @@ function App() {
           window.setTimeout(() => setParticipants((current) => current.map((peer) => peer.id === peerId ? { ...peer, reaction: '' } : peer)), 2200);
         }
       };
+
+      // NEW: Screen share handlers go here!
+
+      manager.onRemoteScreenShare = (id, stream) => setParticipants(c => c.map(p => p.id === id ? { ...p, screenStream: stream } : p));
+      manager.onRemoteScreenShareStopped = (id) => setParticipants(c => c.map(p => p.id === id ? { ...p, screenStream: null } : p));
+
       
       // NEW: Listen for guests asking to join
       manager.onAdmissionRequest = (item) => {
@@ -359,8 +386,39 @@ return <div className="flex min-h-screen flex-col bg-obsidian text-white">
       </div>
     </header>
     
-    <div className="flex min-h-0 flex-1 flex-col"><MeetingStage localName={room.name} localPicture={user.picture} localStream={audioRef.current?.destinationNode?.stream} localVideoStream={cameraStream} participants={participants} muted={!micOn} localVideo={cameraOn} localRaised={handRaised} localReaction={reaction} localMediaRef={localAudioRef} /><ControlBar micOn={micOn} cameraOn={cameraOn} captionsOn={captionsOn} sharing={sharing} handRaised={handRaised} recording={recording} onMic={toggleMic} onCamera={toggleCamera} onCaptions={toggleCaptions} onShare={toggleShare} onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} onRecord={() => setRecording(!recording)} onReact={() => togglePanel('reactions')} onLeave={resetRoom} /></div>
-    
+<div className="flex min-h-0 flex-1 flex-col">
+      <MeetingStage 
+        localName={room.name} 
+        localPicture={user.picture} 
+        localStream={audioRef.current?.destinationNode?.stream} 
+        localVideoStream={cameraStream} 
+        participants={participants} 
+        muted={!micOn} 
+        localVideo={cameraOn} 
+        localRaised={handRaised} 
+        localReaction={reaction} 
+        localMediaRef={localAudioRef}
+        isHost={managerRef.current?.isHost}
+        onMute={(id) => managerRef.current?.setPeerMuted(id, true)}
+        onRemove={(id) => managerRef.current?.removePeer(id)} 
+      />
+      <ControlBar 
+        micOn={micOn} 
+        cameraOn={cameraOn} 
+        captionsOn={captionsOn} 
+        sharing={sharing} 
+        handRaised={handRaised} 
+        recording={recording} 
+        onMic={toggleMic} 
+        onCamera={toggleCamera} 
+        onCaptions={toggleCaptions} 
+        onShare={toggleShare} 
+        onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} 
+        onRecord={() => setRecording(!recording)} 
+        onReact={() => togglePanel('reactions')} 
+        onLeave={resetRoom} 
+      />
+    </div>    
     {/* Host Admission Notification Overlay */}
     {admissionRequests.length > 0 && (
       <div className="fixed right-5 top-20 z-50 flex flex-col gap-3">
