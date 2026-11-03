@@ -432,13 +432,30 @@ export class WebRTCManager {
       case 'screen-answer': this._handleScreenAnswer(msg); break;
       case 'screen-ice-candidate': this._handleScreenCandidate(msg); break;
       case 'screen-share-stop': this._onScreenShareStop(msg); break;
-      case 'chat-message':  this.onChatMessage?.(msg);     break;
-      case 'chat-history':
-        for (const message of msg.messages ?? []) this.onChatMessage?.(message);
+      
+      // FIX: Ensure chat passes the correct object to the React UI
+      case 'chat-message':  
+        if (this.onChatMessage) this.onChatMessage(msg);     
         break;
+      
+      case 'chat-history':
+        for (const message of msg.messages ?? []) {
+            if (this.onChatMessage) this.onChatMessage(message);
+        }
+        break;
+        
       case 'caption':       this.onCaption?.(msg);         break;
-      case 'raise-hand':    this.onRaiseHand?.(msg);       break;
-      case 'emoji-reaction': this.onReaction?.(msg);        break;
+      
+      // FIX: Properly route the raise-hand event from backend to React state
+      case 'raise-hand':    
+        if (this.onRaiseHand) this.onRaiseHand(msg);       
+        break;
+        
+      // FIX: Properly route emoji reactions to React state
+      case 'emoji-reaction': 
+        if (this.onReaction) this.onReaction(msg);        
+        break;
+        
       case 'poll-created':
       case 'poll-vote':
       case 'poll-closed':    this.onPoll?.(msg);             break;

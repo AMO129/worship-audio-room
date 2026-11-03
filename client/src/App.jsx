@@ -335,12 +335,33 @@ function App() {
   const toggleShare = async () => { try { if (sharing) managerRef.current.stopScreenShare(); else await managerRef.current.startScreenShare(); setSharing(!sharing); } catch (error) { setNotice(error.message); } };
   const toggleCaptions = () => { setCaptionsOn(!captionsOn); setCaption(!captionsOn ? 'Captions enabled' : ''); };
 
-  return <div className="flex min-h-screen flex-col bg-obsidian text-white">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-gold text-obsidian"><Music2 size={18} /></span><strong>Worship Room</strong><span className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-white/50 sm:inline">#{room.id}</span></div><div className="flex flex-wrap items-center justify-end gap-2"><Button label="Open Worship Console" onClick={() => togglePanel('audio')}><SlidersHorizontal size={17} /><span className="hidden sm:inline">Worship Console</span></Button><Button label="Invite people" onClick={() => togglePanel('invite')}><UserPlus size={17} /><span className="hidden sm:inline">Invite people</span></Button><Button label="Room information" onClick={() => togglePanel('info')}><Info size={17} /></Button><Button label="Open participants" onClick={() => togglePanel('people')}><Users size={17} /></Button><Button label="Open chat" onClick={() => togglePanel('chat')}><MessageCircle size={17} /></Button></div></header>
+return <div className="flex min-h-screen flex-col bg-obsidian text-white">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-gold text-obsidian"><Music2 size={18} /></span>
+        <strong>Worship Room</strong>
+        <span className="hidden rounded-full border border-white/10 px-3 py-1 text-xs text-white/50 sm:inline">#{room.id}</span>
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        
+        {/* NEW: Host-only check for the Worship Console */}
+        {managerRef.current?.isHost && (
+          <Button label="Open Worship Console" onClick={() => togglePanel('audio')}>
+            <SlidersHorizontal size={17} />
+            <span className="hidden sm:inline">Worship Console</span>
+          </Button>
+        )}
+        
+        <Button label="Invite people" onClick={() => togglePanel('invite')}><UserPlus size={17} /><span className="hidden sm:inline">Invite people</span></Button>
+        <Button label="Room information" onClick={() => togglePanel('info')}><Info size={17} /></Button>
+        <Button label="Open participants" onClick={() => togglePanel('people')}><Users size={17} /></Button>
+        <Button label="Open chat" onClick={() => togglePanel('chat')}><MessageCircle size={17} /></Button>
+      </div>
+    </header>
     
     <div className="flex min-h-0 flex-1 flex-col"><MeetingStage localName={room.name} localPicture={user.picture} localStream={audioRef.current?.destinationNode?.stream} localVideoStream={cameraStream} participants={participants} muted={!micOn} localVideo={cameraOn} localRaised={handRaised} localReaction={reaction} localMediaRef={localAudioRef} /><ControlBar micOn={micOn} cameraOn={cameraOn} captionsOn={captionsOn} sharing={sharing} handRaised={handRaised} recording={recording} onMic={toggleMic} onCamera={toggleCamera} onCaptions={toggleCaptions} onShare={toggleShare} onHand={() => { const next = !handRaised; setHandRaised(next); managerRef.current?.setHandRaised(next); }} onRecord={() => setRecording(!recording)} onReact={() => togglePanel('reactions')} onLeave={resetRoom} /></div>
     
-    {/* NEW: Host Admission Notification Overlay */}
+    {/* Host Admission Notification Overlay */}
     {admissionRequests.length > 0 && (
       <div className="fixed right-5 top-20 z-50 flex flex-col gap-3">
         {admissionRequests.map((req) => (
